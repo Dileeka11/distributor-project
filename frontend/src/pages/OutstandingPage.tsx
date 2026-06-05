@@ -1,0 +1,191 @@
+import { useEffect, useState } from 'react';
+import { Truck, Wallet, Scale, Check } from 'lucide-react';
+import { http, apiErrorMessage } from '@/lib/http';
+import { fmt, fmt0, compact, prettyDate, initials } from '@/lib/format';
+import { toast } from '@/lib/toast';
+import { PageHead } from '@/components/PageHead';
+import { Button } from '@/components/ui/Button';
+import { Badge } from '@/components/ui/Badge';
+import { Segmented, Stat, Empty, Avatar } from '@/components/ui/Common';
+import { Modal } from '@/components/ui/Modal';
+import { Field, Select, MoneyInput } from '@/components/ui/Field';
+import type { Customer, Settlement, Supplier } from '@/types';
+
+type Tab = 'receivable' | 'payable';
+
+export default function OutstandingPage() {
+  const [tab, setTab] = useState<Tab>('receivable');
+  const [receivables, setReceivables] = useState<Customer[]>([]);
+  const [payables, setPayables] = useState<Supplier[]>([]);
+  const [history, setHistory] = useState<Settlement[]>([]);
+  const [target, setTarget] = useState<{ side: Tab; rec: Customer | Supplier } | null>(null);
+
+  const load = async () => {
+    const [{ data: o }, { data: s }] = await Promise.all([
+      http.get('/api/outstanding'),
+      http.get('/api/settlements'),
+    ]);
+    setReceivables(o.receivables);
+    setPayables(o.payables);
+    setHistory(s.data);
+  };
+  useEffect(() => { void load(); }, []);
+
+  const totalRecv = receivables.reduce((s, c) => s + Number(c.balance), 0);
+  const totalPay = payables.reduce((s, c) => s + Number(c.payable), 0);
+  const rows = tab === 'receivable' ? receivables : payables;
+
+  return (
+    <div className="fade-in">
+      <PageHead title="Outstanding & Settlement" sub="Track and clear credit dues — receivables from customers and payables to suppliers." />
+
+      <div className="grid grid-cols-3 gap-4 mb-6">
+        <Stat label="Total receivable" cur="Rs" value={compact(totalRecv)} icon={<Wallet size={18} />} tint="amber" foot={`${receivables.length} customers`} />
+        <Stat label="Total payable" cur="Rs" value={compact(totalPay)} icon={<Truck size={18} />} tint="blue" foot={`${payables.length} suppliers`} />
+        <Stat label="Net position" cur="Rs" value={compact(totalRecv - totalPay)} icon={<Scale size={18} />} tint={totalRecv - totalPay >= 0 ? 'green' : 'red'} foot={totalRecv - totalPay >= 0 ? 'net inflow expected' : 'net outflow'} />
+      </div>
+
+      <div className="flex gap-2.5 mb-4">
+        <Segmented value={tab} onChange={setTab} options={[{ value: 'receivable', label: 'Receivables (Customers)' }, { value: 'payable', label: 'Payables (Suppliers)' }]} />
+      </div>
+
+      <div className="card overflow-hidden mb-6">
+        <table className="tbl">
+          <thead>
+            <tr>
+              <th>{tab === 'receivable' ? 'Customer' : 'Supplier'}</th>
+              <th>Contact</th>
+              {tab === 'receivable' && <th>Credit usage</th>}
+              <th className="num">Outstanding</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => {
+              const amt = tab === 'receivable' ? Number((r as Customer).balance) : Number((r as Supplier).payable);
+              const lim = tab === 'receivable' ? Number((r as Customer).credit_limit) : 0;
+              const pct = lim ? Math.min(100, (amt / lim) * 100) : 0;
+              return (
+                <tr key={r.id}>
+                  <td>
+                    <div className="flex items-center gap-3">
+                      {tab === 'receivable'
+                        ? <Avatar name={r.name} />
+                        : <div className="grid place-items-center w-[34px] h-[34px] rounded-[9px]" style={{ background: 'var(--blue-soft)', color: 'var(--blue)' }}><Truck size={16} /></div>
+                      }
+                      <div>
+                        <div className="font-semibold">{r.name}</div>
+                        <div className="text-[12px] mono" style={{ color: 'var(--text-muted)' }}>{r.code}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <div className="text-[12px]" style={{ color: 'var(--text-muted)' }}>{r.contact}</div>
+                    <div className="text-[12px] mono" style={{ color: 'var(--text-muted)' }}>{r.phone}</div>
+                  </td>
+                  {tab === 'receivable' && (
+                    <td style={{ minWidth: 130 }}>
+                      <div className="bar"><span style={{ width: `${pct}%`, background: amt > lim ? 'var(--red)' : 'var(--accent)' }} /></div>
+                      <div className="text-[12px] mono mt-1" style={{ color: 'var(--text-muted)' }}>{Math.round(pct)}% of Rs {fmt0(lim)}</div>
+                    </td>
+                  )}
+                  <td className="num money font-bold" style={{ color: 'var(--red)' }}>{fmt(amt)}</td>
+                  <td className="num">
+                    <Button variant="primary" size="sm" icon={<Check size={14} />} onClick={() => setTarget({ side: tab, rec: r })}>
+                      {tab === 'receivable' ? 'Collect' : 'Pay'}
+                    </Button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {rows.length === 0 && <Empty icon={<Check size={40} />} title="All settled" sub={`No outstanding ${tab === 'receivable' ? 'receivables' : 'payables'}.`} />}
+      </div>
+
+      <div className="card">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <div className="text-[14.5px] font-bold">Settlement history</div>
+          <span className="chip">{history.length} records</span>
+        </div>
+        <div className="overflow-hidden">
+          <table className="tbl">
+            <thead><tr><th>Receipt</th><th>Date</th><th>Party</th><th>Direction</th><th>Mode</th><th className="num">Amount</th></tr></thead>
+            <tbody>
+              {history.map((s) => (
+                <tr key={s.id}>
+                  <td className="mono font-semibold">{s.code}</td>
+                  <td className="text-[12px]" style={{ color: 'var(--text-muted)' }}>{prettyDate(s.date)}</td>
+                  <td className="font-semibold">{s.customer?.name ?? s.supplier?.name ?? '—'}</td>
+                  <td><Badge kind={s.side === 'receivable' ? 'green' : 'blue'}>{s.side === 'receivable' ? 'Collected' : 'Paid out'}</Badge></td>
+                  <td className="text-[12px]" style={{ color: 'var(--text-muted)' }}>{s.mode}</td>
+                  <td className="num money font-bold">{fmt(s.amount as number)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {target && <SettleModal side={target.side} rec={target.rec} onClose={() => setTarget(null)} onSaved={() => { setTarget(null); void load(); }} />}
+    </div>
+  );
+}
+
+function SettleModal({ side, rec, onClose, onSaved }: { side: Tab; rec: Customer | Supplier; onClose: () => void; onSaved: () => void }) {
+  const outstanding = side === 'receivable' ? Number((rec as Customer).balance) : Number((rec as Supplier).payable);
+  const [amount, setAmount] = useState(String(outstanding));
+  const [mode, setMode] = useState('Bank Transfer');
+  const [busy, setBusy] = useState(false);
+  const amt = Math.min(Number(amount) || 0, outstanding);
+  const remaining = outstanding - amt;
+
+  const save = async () => {
+    if (amt <= 0) return;
+    setBusy(true);
+    try {
+      await http.post('/api/settlements', { side, party_id: rec.id, amount: amt, mode });
+      toast(side === 'receivable' ? 'Receipt recorded' : 'Payment recorded');
+      onSaved();
+    } catch (e) { toast(apiErrorMessage(e), 'err'); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <Modal
+      title={(side === 'receivable' ? 'Collect payment — ' : 'Pay supplier — ') + rec.name}
+      onClose={onClose}
+      footer={<>
+        <Button variant="ghost" onClick={onClose}>Cancel</Button>
+        <Button variant="primary" disabled={amt <= 0 || busy} onClick={save}>
+          {side === 'receivable' ? 'Record receipt' : 'Record payment'} · Rs {fmt0(amt)}
+        </Button>
+      </>}
+    >
+      <div className="rounded-[10px] p-4 mb-5 flex justify-between items-center" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+        <div>
+          <div className="text-[12px]" style={{ color: 'var(--text-muted)' }}>Current outstanding</div>
+          <div className="mono text-[22px] font-extrabold" style={{ color: 'var(--red)' }}>Rs {fmt(outstanding)}</div>
+        </div>
+        <div className="grid place-items-center w-11 h-11 rounded-[9px] font-bold" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>{initials(rec.name)}</div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <Field label="Amount (LKR)" req hint={`Max Rs ${fmt0(outstanding)}`}><MoneyInput value={amount} onChange={setAmount} /></Field>
+        <Field label="Payment mode"><Select value={mode} onChange={(e) => setMode(e.target.value)}>{['Bank Transfer', 'Cash', 'Cheque', 'Card', 'Online'].map((m) => <option key={m}>{m}</option>)}</Select></Field>
+      </div>
+
+      <div className="mt-4 flex gap-2.5">
+        {[0.25, 0.5, 1].map((f) => (
+          <Button key={f} variant="subtle" size="sm" onClick={() => setAmount(String(Math.round(outstanding * f)))}>{f === 1 ? 'Full' : f * 100 + '%'}</Button>
+        ))}
+      </div>
+
+      <div className="h-px my-4" style={{ background: 'var(--border)' }} />
+      <div className="flex justify-between text-[14px]">
+        <span style={{ color: 'var(--text-muted)' }}>Remaining after settlement</span>
+        <span className="money font-bold" style={{ color: remaining > 0 ? 'var(--amber)' : 'var(--green)' }}>Rs {fmt(remaining)}</span>
+      </div>
+    </Modal>
+  );
+}

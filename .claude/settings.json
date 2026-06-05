@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(taskkill //PID 22948 //F)",
+      "Bash(taskkill //PID 20840 //F)",
+      "Bash(taskkill //PID 25084 //F)",
+      "Bash(timeout 4 php ../backend/artisan serve --host=127.0.0.1 --port=8000)",
+      "Bash(grep -l \"App\\\\\\\\\\\\\\\\Providers\" \"d:/My Projects/distributor-project/backend/config/\"*.php)",
+      "Bash(composer --version)",
+      "Bash(rm -rf vendor composer.lock)",
+      "Bash(composer install *)",
+      "Bash(cp .env .env.bak)",
+      "Bash(cp .env.production .env)"
+    ]
+  }
+}
