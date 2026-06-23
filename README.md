@@ -1,4 +1,4 @@
-# MediStock — Distributor Management System
+# Distributor Management System
 
 Full distributor system: inventory, suppliers, customers, cash & credit invoicing,
 goods-received notes (GRN), outstanding settlement and live theming.
