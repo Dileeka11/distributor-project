@@ -175,14 +175,6 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
     return { subtotal, cashAmt, chequeAmt, discountAmt, taxable, taxAmt, total, paidNum, balance };
   }, [lines, taxRate, type, paid, discCash, discCheque, cashPct, chequePct]);
 
-  // In edit mode the customer's balance already includes this invoice's old outstanding,
-  // so remove that before adding the edited balance (otherwise it double-counts).
-  const editBalance = isEdit && editInvoice && editInvoice.type === 'credit'
-    ? Number(editInvoice.total) - Number(editInvoice.paid)
-    : 0;
-  const newExposure = cust ? Number(cust.balance) - editBalance + totals.balance : 0;
-  const overLimit = type === 'credit' && cust && newExposure > Number(cust.credit_limit);
-
   const setLine = (i: number, patch: Partial<DraftLine>) =>
     setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
   const pickItem = (i: number, id: number | '') => {
@@ -255,21 +247,6 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
           </div>
         </Field>
       </div>
-
-      {type === 'credit' && cust && (
-        <div className="flex items-center gap-3.5 p-3 rounded-[10px] mb-5"
-             style={{ background: overLimit ? 'var(--red-soft)' : 'var(--surface-2)', border: `1px solid ${overLimit ? 'var(--red)' : 'var(--border)'}` }}>
-          <Wallet size={18} style={{ color: overLimit ? 'var(--red)' : 'var(--text-muted)' }} />
-          <div className="flex-1 text-[12.5px]">
-            <div className="flex justify-between mb-1">
-              <span className="font-semibold">Credit exposure after this invoice</span>
-              <span className="mono">Rs {fmt0(newExposure)} / {fmt0(cust.credit_limit as number)}</span>
-            </div>
-            <div className="bar"><span style={{ width: `${Math.min(100, (newExposure / (Number(cust.credit_limit) || 1)) * 100)}%`, background: overLimit ? 'var(--red)' : 'var(--accent)' }} /></div>
-          </div>
-          {overLimit && <Badge kind="red">Over limit</Badge>}
-        </div>
-      )}
 
       <div className="text-[13px] font-semibold mb-2" style={{ color: 'var(--text-muted)' }}>Items</div>
       <div className="card p-2.5 mb-4">
