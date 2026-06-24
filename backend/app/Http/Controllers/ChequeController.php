@@ -3,8 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Models\Customer;
+use App\Models\Grn;
+use App\Models\GrnCheque;
 use App\Models\Invoice;
 use App\Models\InvoiceCheque;
+use App\Models\Supplier;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 
@@ -62,5 +65,59 @@ class ChequeController extends Controller
         });
 
         return response()->json(['data' => $cheque->fresh()]);
+    }
+
+    public function grnIndex(): JsonResponse
+    {
+        $rows = GrnCheque::query()
+            ->with(['grn:id,no,supplier_id,total,paid', 'grn.supplier:id,code,name'])
+            ->orderBy('cleared_at')
+            ->orderByDesc('id')
+            ->get()
+            ->map(fn (GrnCheque $c) => [
+                'id' => $c->id,
+                'grn_id' => $c->grn_id,
+                'grn_no' => $c->grn?->no,
+                'supplier_id' => $c->grn?->supplier_id,
+                'supplier_name' => $c->grn?->supplier?->name,
+                'cheque_no' => $c->cheque_no,
+                'cheque_date' => optional($c->cheque_date)->toDateString(),
+                'amount' => (float) $c->amount,
+                'grn_total' => (float) ($c->grn?->total ?? 0),
+                'grn_paid' => (float) ($c->grn?->paid ?? 0),
+                'cleared' => (bool) $c->cleared_at,
+            ]);
+
+        return response()->json(['data' => $rows]);
+    }
+
+    /**
+     * Tick / untick a GRN cheque as "passed". Clearing applies it as a payment
+     * to the supplier (grn paid += value, supplier payable -= value).
+     */
+    public function grnToggle(GrnCheque $grnCheque): JsonResponse
+    {
+        DB::transaction(function () use ($grnCheque) {
+            /** @var Grn $grn */
+            $grn = Grn::query()->whereKey($grnCheque->grn_id)->lockForUpdate()->firstOrFail();
+            $amount = (float) $grnCheque->amount;
+
+            if ($grnCheque->cleared_at) {
+                $grn->paid = round((float) $grn->paid - $amount, 2);
+                Supplier::query()->whereKey($grn->supplier_id)->increment('payable', $amount);
+                $grnCheque->cleared_at = null;
+            } else {
+                $grn->paid = round((float) $grn->paid + $amount, 2);
+                Supplier::query()->whereKey($grn->supplier_id)->decrement('payable', $amount);
+                $grnCheque->cleared_at = now();
+            }
+
+            $balance = round((float) $grn->total - (float) $grn->paid, 2);
+            $grn->status = $balance <= 0 ? 'paid' : ((float) $grn->paid > 0 ? 'partial' : 'unpaid');
+            $grn->save();
+            $grnCheque->save();
+        });
+
+        return response()->json(['data' => $grnCheque->fresh()]);
     }
 }

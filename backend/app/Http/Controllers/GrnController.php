@@ -108,6 +108,15 @@ class GrnController extends Controller
                 ]);
             }
 
+            // Cheque details (record-only — they do not affect the paid/payable amounts).
+            foreach ($data['cheques'] ?? [] as $chq) {
+                $grn->cheques()->create([
+                    'cheque_no' => $chq['no'] ?? null,
+                    'cheque_date' => $chq['date'] ?? null,
+                    'amount' => (float) ($chq['amount'] ?? 0),
+                ]);
+            }
+
             if ($type === 'credit' && $balance > 0) {
                 Supplier::query()->whereKey($data['supplier_id'])->increment('payable', $balance);
             }

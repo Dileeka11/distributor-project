@@ -37,6 +37,11 @@ class Grn extends Model
         return $this->hasMany(GrnLine::class);
     }
 
+    public function cheques(): HasMany
+    {
+        return $this->hasMany(GrnCheque::class);
+    }
+
     public function getBalanceAttribute(): float
     {
         return (float) $this->total - (float) $this->paid;

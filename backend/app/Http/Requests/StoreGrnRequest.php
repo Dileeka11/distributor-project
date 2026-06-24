@@ -23,6 +23,10 @@ class StoreGrnRequest extends FormRequest
             'lines.*.qty' => ['required', 'numeric', 'min:0.01'],
             'lines.*.unit_price' => ['required', 'numeric', 'min:0'],
             'lines.*.discount' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'cheques' => ['nullable', 'array'],
+            'cheques.*.no' => ['nullable', 'string', 'max:60'],
+            'cheques.*.date' => ['nullable', 'date'],
+            'cheques.*.amount' => ['nullable', 'numeric', 'min:0'],
         ];
     }
 }

@@ -51,6 +51,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/cheques', [ChequeController::class, 'index']);
     Route::post('/cheques/{cheque}/toggle', [ChequeController::class, 'toggle']);
+    Route::get('/grn-cheques', [ChequeController::class, 'grnIndex']);
+    Route::post('/grn-cheques/{grnCheque}/toggle', [ChequeController::class, 'grnToggle']);
 
     Route::get('/settlements', [SettlementController::class, 'index']);
     Route::post('/settlements', [SettlementController::class, 'store']);

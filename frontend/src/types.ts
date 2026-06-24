@@ -108,6 +108,20 @@ export interface ChequeRecord {
   cleared: boolean;
 }
 
+export interface GrnChequeRecord {
+  id: ID;
+  grn_id: ID;
+  grn_no: string;
+  supplier_id: ID;
+  supplier_name: string;
+  cheque_no: string | null;
+  cheque_date: string | null;
+  amount: string | number;
+  grn_total: string | number;
+  grn_paid: string | number;
+  cleared: boolean;
+}
+
 export interface GrnLine {
   id?: ID;
   item_id: ID;

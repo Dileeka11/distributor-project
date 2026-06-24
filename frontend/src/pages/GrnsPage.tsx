@@ -19,6 +19,8 @@ interface DraftLine { item_id: number | ''; qty: string; unit_price: string; dis
 const blankLine = (): DraftLine => ({ item_id: '', qty: '1', unit_price: '0', discount: '0' });
 const unitCost = (l: DraftLine) => (Number(l.unit_price) || 0) * (1 - (Number(l.discount) || 0) / 100);
 
+interface ChequeRow { no: string; date: string; amount: string; }
+
 export default function GrnsPage() {
   const [rows, setRows] = useState<Grn[]>([]);
   const [q, setQ] = useState('');
@@ -94,6 +96,12 @@ function CreateGrn({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
   const [supplierId, setSupplierId] = useState<number | ''>('');
   const [lines, setLines] = useState<DraftLine[]>([blankLine()]);
   const [paid, setPaid] = useState('');
+  const [cheques, setCheques] = useState<ChequeRow[]>([]);
+
+  const addCheque = () => setCheques((cs) => [...cs, { no: '', date: '', amount: '' }]);
+  const delCheque = (i: number) => setCheques((cs) => cs.filter((_, idx) => idx !== i));
+  const setCheque = (i: number, patch: Partial<ChequeRow>) =>
+    setCheques((cs) => cs.map((c, idx) => (idx === i ? { ...c, ...patch } : c)));
 
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [items, setItems] = useState<Item[]>([]);
@@ -135,6 +143,11 @@ function CreateGrn({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
         type, supplier_id: supplierId, tax_rate: taxRate,
         paid: type === 'cash' ? totals.total : Number(paid) || 0,
         lines: validLines.map((l) => ({ item_id: l.item_id, qty: Number(l.qty), unit_price: Number(l.unit_price) || 0, discount: Number(l.discount) || 0 })),
+        cheques: type === 'credit'
+          ? cheques
+              .filter((c) => c.no.trim() || c.date || Number(c.amount) > 0)
+              .map((c) => ({ no: c.no.trim() || null, date: c.date || null, amount: Number(c.amount) || 0 }))
+          : [],
       });
       toast('GRN created');
       onSaved();
@@ -242,6 +255,32 @@ function CreateGrn({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
           <div className="mt-3 text-[12px] flex gap-2 items-center" style={{ color: 'var(--text-faint)' }}>
             <Box size={15} /> {validLines.reduce((s, l) => s + (Number(l.qty) || 0), 0).toLocaleString()} units will be added to stock.
           </div>
+
+          {type === 'credit' && (
+            <div className="mt-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-[13px] font-semibold" style={{ color: 'var(--text-muted)' }}>Cheque details</div>
+                <Button variant="subtle" size="sm" icon={<Plus size={13} />} onClick={addCheque}>Add cheque</Button>
+              </div>
+              {cheques.length === 0 ? (
+                <div className="text-[12px]" style={{ color: 'var(--text-faint)' }}>No cheques. Use “Add cheque” to record cheques given to the supplier.</div>
+              ) : (
+                <div className="flex flex-col gap-1.5">
+                  {cheques.map((c, i) => (
+                    <div key={i} className="flex gap-1.5 items-center">
+                      <Input placeholder="Cheque no." value={c.no} onChange={(e) => setCheque(i, { no: e.target.value })} className="mono" style={{ height: 34, flex: 1, minWidth: 0 }} />
+                      <Input type="date" value={c.date} onChange={(e) => setCheque(i, { date: e.target.value })} style={{ height: 34, width: 140 }} />
+                      <Input placeholder="0.00" inputMode="decimal" value={c.amount} onChange={(e) => setCheque(i, { amount: e.target.value.replace(/[^\d.]/g, '') })} className="mono text-right" style={{ height: 34, width: 96 }} />
+                      <button type="button" className="grid place-items-center w-7 h-7 rounded-md hover:bg-surface-2 flex-shrink-0" onClick={() => delCheque(i)}><X size={14} /></button>
+                    </div>
+                  ))}
+                  <div className="text-[11.5px] mt-0.5" style={{ color: 'var(--text-faint)' }}>
+                    Recorded for reference — clear them later in Outstanding. Total: Rs {fmt(cheques.reduce((s, c) => s + (Number(c.amount) || 0), 0))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
         <div className="rounded-[10px] p-4" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
           <TotalRow k="Subtotal" v={fmt(totals.subtotal)} />

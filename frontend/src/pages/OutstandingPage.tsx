@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Segmented, Stat, Empty, Avatar } from '@/components/ui/Common';
 import { Modal } from '@/components/ui/Modal';
 import { Field, Select, MoneyInput, Input } from '@/components/ui/Field';
-import type { ChequeRecord, Customer, Settlement, Supplier } from '@/types';
+import type { ChequeRecord, Customer, GrnChequeRecord, Settlement, Supplier } from '@/types';
 
 type Tab = 'receivable' | 'payable';
 
@@ -19,34 +19,45 @@ export default function OutstandingPage() {
   const [payables, setPayables] = useState<Supplier[]>([]);
   const [history, setHistory] = useState<Settlement[]>([]);
   const [cheques, setCheques] = useState<ChequeRecord[]>([]);
+  const [grnCheques, setGrnCheques] = useState<GrnChequeRecord[]>([]);
   const [chequeQ, setChequeQ] = useState('');
   const [target, setTarget] = useState<{ side: Tab; rec: Customer | Supplier } | null>(null);
 
   const load = async () => {
-    const [{ data: o }, { data: s }, { data: cq }] = await Promise.all([
+    const [{ data: o }, { data: s }, { data: cq }, { data: gcq }] = await Promise.all([
       http.get('/api/outstanding'),
       http.get('/api/settlements'),
       http.get('/api/cheques'),
+      http.get('/api/grn-cheques'),
     ]);
     setReceivables(o.receivables);
     setPayables(o.payables);
     setHistory(s.data);
     setCheques(cq.data);
+    setGrnCheques(gcq.data);
   };
   useEffect(() => { void load(); }, []);
 
-  const toggleCheque = async (c: ChequeRecord) => {
+  // Unified cheque rows for the active tab: customer (invoice) cheques on
+  // receivables, supplier (GRN) cheques on payables.
+  const chequeRows = tab === 'payable'
+    ? grnCheques.map((c) => ({ kind: 'grn' as const, id: c.id, ref: c.grn_no, party: c.supplier_name, no: c.cheque_no, date: c.cheque_date, amount: c.amount, total: c.grn_total, cleared: c.cleared }))
+    : cheques.map((c) => ({ kind: 'invoice' as const, id: c.id, ref: c.invoice_no, party: c.customer_name, no: c.cheque_no, date: c.cheque_date, amount: c.amount, total: c.invoice_total, cleared: c.cleared }));
+
+  const toggleChequeRow = async (r: typeof chequeRows[number]) => {
+    const who = tab === 'payable' ? "supplier's payable" : "customer's outstanding";
     const ok = await confirmDelete({
-      title: c.cleared ? 'Un-clear this cheque?' : 'Mark cheque as cleared?',
-      html: c.cleared
-        ? `Reverse <b>${c.cheque_no || 'cheque'}</b> (Rs ${fmt0(Number(c.amount))})? This adds Rs ${fmt0(Number(c.amount))} back to ${c.customer_name}'s outstanding.`
-        : `Cheque <b>${c.cheque_no || ''}</b> for <b>Rs ${fmt0(Number(c.amount))}</b> passed? This reduces ${c.customer_name}'s outstanding by Rs ${fmt0(Number(c.amount))} (paid +Rs ${fmt0(Number(c.amount))}).`,
-      confirmText: c.cleared ? 'Yes, reverse' : 'Yes, cleared',
+      title: r.cleared ? 'Un-clear this cheque?' : 'Mark cheque as passed?',
+      html: r.cleared
+        ? `Reverse <b>${r.no || 'cheque'}</b> (Rs ${fmt0(Number(r.amount))})? Adds Rs ${fmt0(Number(r.amount))} back to ${r.party}'s ${who.replace("'s", '')}.`
+        : `Cheque <b>${r.no || ''}</b> for <b>Rs ${fmt0(Number(r.amount))}</b> passed? Reduces ${r.party}'s ${who.replace("'s", '')} by Rs ${fmt0(Number(r.amount))}.`,
+      confirmText: r.cleared ? 'Yes, reverse' : 'Yes, passed',
     });
     if (!ok) return;
+    const url = r.kind === 'grn' ? `/api/grn-cheques/${r.id}/toggle` : `/api/cheques/${r.id}/toggle`;
     try {
-      await http.post(`/api/cheques/${c.id}/toggle`);
-      toast(c.cleared ? 'Cheque reversed' : 'Cheque cleared');
+      await http.post(url);
+      toast(r.cleared ? 'Cheque reversed' : 'Cheque cleared');
       void load();
     } catch (e) { toast(apiErrorMessage(e), 'err'); }
   };
@@ -132,36 +143,36 @@ export default function OutstandingPage() {
         <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-border">
           <div className="text-[14.5px] font-bold whitespace-nowrap">Cheque details</div>
           <Input value={chequeQ} onChange={(e) => setChequeQ(e.target.value)} placeholder="Search cheque no…" style={{ height: 34, maxWidth: 260 }} />
-          <span className="chip whitespace-nowrap">{cheques.filter((c) => !c.cleared).length} pending</span>
+          <span className="chip whitespace-nowrap">{chequeRows.filter((c) => !c.cleared).length} pending</span>
         </div>
         <table className="tbl">
           <thead>
             <tr>
-              <th>Invoice</th><th>Customer</th><th>Cheque No</th><th>Date</th>
-              <th className="num">Value</th><th className="num">Invoice total</th><th>Passed</th>
+              <th>{tab === 'payable' ? 'GRN' : 'Invoice'}</th><th>{tab === 'payable' ? 'Supplier' : 'Customer'}</th><th>Cheque No</th><th>Date</th>
+              <th className="num">Value</th><th className="num">{tab === 'payable' ? 'GRN total' : 'Invoice total'}</th><th>Passed</th>
             </tr>
           </thead>
           <tbody>
-            {cheques
+            {chequeRows
               .filter((c) => {
                 const q = chequeQ.trim().toLowerCase();
                 if (!q) return true;
-                return (c.cheque_no ?? '').toLowerCase().includes(q)
-                  || (c.invoice_no ?? '').toLowerCase().includes(q)
-                  || (c.customer_name ?? '').toLowerCase().includes(q);
+                return (c.no ?? '').toLowerCase().includes(q)
+                  || (c.ref ?? '').toLowerCase().includes(q)
+                  || (c.party ?? '').toLowerCase().includes(q);
               })
               .map((c) => (
               <tr key={c.id} style={c.cleared ? { background: 'var(--green-soft)' } : undefined}>
-                <td className="mono font-semibold">{c.invoice_no}</td>
-                <td className="font-medium">{c.customer_name}</td>
-                <td className="mono">{c.cheque_no || '—'}</td>
-                <td className="text-[12px]" style={{ color: 'var(--text-muted)' }}>{c.cheque_date ? prettyDate(c.cheque_date) : '—'}</td>
+                <td className="mono font-semibold">{c.ref}</td>
+                <td className="font-medium">{c.party}</td>
+                <td className="mono">{c.no || '—'}</td>
+                <td className="text-[12px]" style={{ color: 'var(--text-muted)' }}>{c.date ? prettyDate(c.date) : '—'}</td>
                 <td className="num money font-bold">{fmt(c.amount as number)}</td>
-                <td className="num money" style={{ color: 'var(--text-muted)' }}>{fmt(c.invoice_total as number)}</td>
+                <td className="num money" style={{ color: 'var(--text-muted)' }}>{fmt(c.total as number)}</td>
                 <td>
                   <button
                     type="button"
-                    onClick={() => void toggleCheque(c)}
+                    onClick={() => void toggleChequeRow(c)}
                     className="flex items-center gap-2 text-[13px]"
                     title={c.cleared ? 'Cleared — click to reverse' : 'Mark as cleared'}
                   >
@@ -176,7 +187,7 @@ export default function OutstandingPage() {
             ))}
           </tbody>
         </table>
-        {cheques.length === 0 && <Empty icon={<Check size={40} />} title="No cheques" sub="Cheques recorded on credit invoices appear here." />}
+        {chequeRows.length === 0 && <Empty icon={<Check size={40} />} title="No cheques" sub={tab === 'payable' ? 'Cheques recorded on credit GRNs appear here.' : 'Cheques recorded on credit invoices appear here.'} />}
       </div>
 
       <div className="card">
