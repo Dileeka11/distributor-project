@@ -260,14 +260,8 @@ function SettleModal({ side, rec, onClose, onSaved }: { side: Tab; rec: Customer
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <Field label="Amount (LKR)" req hint={`Max Rs ${fmt0(outstanding)}`}><MoneyInput value={amount} onChange={setAmount} /></Field>
+        <Field label="Amount (LKR)" req><MoneyInput value={amount} onChange={setAmount} /></Field>
         <Field label="Payment mode"><Select value={mode} onChange={(e) => setMode(e.target.value)}>{['Bank Transfer', 'Cash', 'Cheque', 'Card', 'Online'].map((m) => <option key={m}>{m}</option>)}</Select></Field>
-      </div>
-
-      <div className="mt-4 flex gap-2.5">
-        {[0.25, 0.5, 1].map((f) => (
-          <Button key={f} variant="subtle" size="sm" onClick={() => setAmount(String(Math.round(outstanding * f)))}>{f === 1 ? 'Full' : f * 100 + '%'}</Button>
-        ))}
       </div>
 
       <div className="h-px my-4" style={{ background: 'var(--border)' }} />
