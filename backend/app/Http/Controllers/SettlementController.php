@@ -54,32 +54,44 @@ class SettlementController extends Controller
 
             if ($data['side'] === 'receivable') {
                 $customer = Customer::query()->whereKey($data['party_id'])->lockForUpdate()->firstOrFail();
-                $amount = min($amount, (float) $customer->balance);
+                // Total outstanding = opening (credit_limit) + invoice balance.
+                $totalOutstanding = (float) $customer->credit_limit + (float) $customer->balance;
+                $amount = min($amount, $totalOutstanding);
                 abort_if($amount <= 0, 422, 'Nothing to collect from this customer');
 
-                $customer->decrement('balance', $amount);
+                // Apply to the invoice balance first, then to the opening outstanding.
+                $fromBalance = min($amount, (float) $customer->balance);
+                $fromOpening = round($amount - $fromBalance, 2);
 
-                $remaining = $amount;
-                Invoice::query()
-                    ->where('customer_id', $customer->id)
-                    ->where('type', 'credit')
-                    ->whereRaw('total - paid > 0')
-                    ->orderBy('date')->orderBy('id')
-                    ->lockForUpdate()
-                    ->get()
-                    ->each(function (Invoice $inv) use (&$remaining) {
-                        if ($remaining <= 0) {
-                            return;
-                        }
-                        $due = (float) $inv->total - (float) $inv->paid;
-                        $pay = min($due, $remaining);
-                        $remaining -= $pay;
-                        $newPaid = (float) $inv->paid + $pay;
-                        $inv->update([
-                            'paid' => $newPaid,
-                            'status' => $newPaid >= (float) $inv->total ? 'paid' : 'partial',
-                        ]);
-                    });
+                if ($fromBalance > 0) {
+                    $customer->decrement('balance', $fromBalance);
+
+                    $remaining = $fromBalance;
+                    Invoice::query()
+                        ->where('customer_id', $customer->id)
+                        ->where('type', 'credit')
+                        ->whereRaw('total - paid > 0')
+                        ->orderBy('date')->orderBy('id')
+                        ->lockForUpdate()
+                        ->get()
+                        ->each(function (Invoice $inv) use (&$remaining) {
+                            if ($remaining <= 0) {
+                                return;
+                            }
+                            $due = (float) $inv->total - (float) $inv->paid;
+                            $pay = min($due, $remaining);
+                            $remaining -= $pay;
+                            $newPaid = (float) $inv->paid + $pay;
+                            $inv->update([
+                                'paid' => $newPaid,
+                                'status' => $newPaid >= (float) $inv->total ? 'paid' : 'partial',
+                            ]);
+                        });
+                }
+
+                if ($fromOpening > 0) {
+                    $customer->decrement('credit_limit', $fromOpening);
+                }
 
                 $customerId = $customer->id;
                 $supplierId = null;
@@ -119,7 +131,7 @@ class SettlementController extends Controller
             }
 
             return Settlement::query()->create([
-                'code' => NumberService::next(Settlement::class, $prefix, 3),
+                'code' => NumberService::next(Settlement::class, $prefix, 3, 'code'),
                 'date' => now()->toDateString(),
                 'side' => $data['side'],
                 'customer_id' => $customerId,

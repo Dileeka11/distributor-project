@@ -222,7 +222,9 @@ export default function OutstandingPage() {
 }
 
 function SettleModal({ side, rec, onClose, onSaved }: { side: Tab; rec: Customer | Supplier; onClose: () => void; onSaved: () => void }) {
-  const outstanding = side === 'receivable' ? Number((rec as Customer).balance) : Number((rec as Supplier).payable);
+  const outstanding = side === 'receivable'
+    ? Number((rec as Customer).credit_limit) + Number((rec as Customer).balance)
+    : Number((rec as Supplier).payable);
   const [amount, setAmount] = useState(String(outstanding));
   const [mode, setMode] = useState('Bank Transfer');
   const [busy, setBusy] = useState(false);
