@@ -2,11 +2,11 @@ import { useEffect, useState } from 'react';
 import { Plus, Edit2, Trash2, Truck } from 'lucide-react';
 import { http, apiErrorMessage } from '@/lib/http';
 import { fmt0 } from '@/lib/format';
-import { toast } from '@/lib/toast';
+import { toast, confirmDelete } from '@/lib/toast';
 import { PageHead } from '@/components/PageHead';
 import { Button } from '@/components/ui/Button';
 import { SearchBar, Empty } from '@/components/ui/Common';
-import { Modal, Confirm } from '@/components/ui/Modal';
+import { Modal } from '@/components/ui/Modal';
 import { Field, Input, Textarea } from '@/components/ui/Field';
 import type { Supplier } from '@/types';
 
@@ -23,7 +23,6 @@ export default function SuppliersPage() {
   const [rows, setRows] = useState<Supplier[]>([]);
   const [q, setQ] = useState('');
   const [editing, setEditing] = useState<Supplier | 'new' | null>(null);
-  const [deleting, setDeleting] = useState<Supplier | null>(null);
 
   const load = () => http.get('/api/suppliers', { params: { q } }).then((r) => setRows(r.data.data));
   useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [q]);
@@ -70,7 +69,11 @@ export default function SuppliersPage() {
                 <td className="num">
                   <div className="flex gap-1.5 justify-end">
                     <Button variant="subtle" size="sm" icon={<Edit2 size={14} />} onClick={() => setEditing(s)} />
-                    <Button variant="subtle" size="sm" icon={<Trash2 size={14} />} onClick={() => setDeleting(s)} />
+                    <Button variant="subtle" size="sm" icon={<Trash2 size={14} />} onClick={async () => {
+                      if (!(await confirmDelete({ title: 'Delete supplier?', html: `Remove <b>${s.name}</b>?` }))) return;
+                      try { await http.delete(`/api/suppliers/${s.id}`); toast('Supplier deleted'); void load(); }
+                      catch (e) { toast(apiErrorMessage(e), 'err'); }
+                    }} />
                   </div>
                 </td>
               </tr>
@@ -86,17 +89,6 @@ export default function SuppliersPage() {
           nextCode={nextSupplierCode(rows)}
           onClose={() => setEditing(null)}
           onSaved={() => { setEditing(null); void load(); }}
-        />
-      )}
-      {deleting && (
-        <Confirm
-          title="Delete supplier?" danger confirmLabel="Delete"
-          message={<>Remove <strong>{deleting.name}</strong>?</>}
-          onClose={() => setDeleting(null)}
-          onConfirm={async () => {
-            try { await http.delete(`/api/suppliers/${deleting.id}`); toast('Supplier deleted'); void load(); }
-            catch (e) { toast(apiErrorMessage(e), 'err'); }
-          }}
         />
       )}
     </div>

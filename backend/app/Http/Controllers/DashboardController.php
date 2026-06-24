@@ -34,10 +34,13 @@ class DashboardController extends Controller
             ->orderByDesc('balance')
             ->limit(5)->get(['id', 'code', 'name', 'credit_limit', 'balance']);
 
-        // 14-day sales by type
-        $from = Carbon::today()->subDays(13);
+        // 14-day sales by type — anchored to the latest invoice so activity always shows,
+        // even when the most recent data is older than the current date.
+        $latestDate = Invoice::query()->max('date');
+        $anchor = $latestDate ? Carbon::parse($latestDate) : Carbon::today();
+        $from = $anchor->copy()->subDays(13);
         $daily = Invoice::query()
-            ->where('date', '>=', $from)
+            ->whereBetween('date', [$from, $anchor])
             ->selectRaw('date, type, SUM(total) as total')
             ->groupBy('date', 'type')
             ->get()

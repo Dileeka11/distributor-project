@@ -1,6 +1,5 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle } from 'lucide-react';
 import { useAuth } from '@/store/auth';
 import { useSettings } from '@/store/settings';
 import { Field, Input } from '@/components/ui/Field';
@@ -12,8 +11,8 @@ export default function LoginPage() {
   const { login } = useAuth();
   const { settings } = useSettings();
   const navigate = useNavigate();
-  const [email, setEmail] = useState('admin@medistock.lk');
-  const [pw, setPw] = useState('demo1234');
+  const [email, setEmail] = useState('');
+  const [pw, setPw] = useState('');
   const [show, setShow] = useState(false);
   const [remember, setRemember] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -103,11 +102,6 @@ export default function LoginPage() {
               {busy ? 'Signing in…' : 'Sign in'}
             </Button>
           </form>
-
-          <div className="mt-5 px-4 py-3 text-[12.5px] flex gap-2 items-center rounded-[9px]" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
-            <AlertCircle size={16} style={{ color: 'var(--text-faint)', flexShrink: 0 }} />
-            Demo credentials are pre-filled. Press <span className="mono px-1.5 py-0.5 rounded" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>Sign in</span>.
-          </div>
         </div>
       </section>
     </div>

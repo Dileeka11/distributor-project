@@ -30,9 +30,20 @@ export interface Supplier extends Party {
 }
 
 export interface Customer extends Party {
+  city: string | null;
   type: string;
+  cash_discount: string | number;
+  cheque_discount: string | number;
+  terms_days: number;
   credit_limit: string | number;
+  description: string | null;
   balance: string | number;
+  paid_total?: string | number;
+}
+
+export interface CustomerType {
+  id: ID;
+  name: string;
 }
 
 export type TxnType = 'cash' | 'credit';
@@ -55,12 +66,23 @@ export interface Invoice {
   customer_id: ID;
   customer?: Customer;
   subtotal: string | number;
+  cash_discount?: string | number;
+  cheque_discount?: string | number;
+  discount_amount?: string | number;
   tax_rate: string | number;
   tax_amount: string | number;
   total: string | number;
   paid: string | number;
   status: TxnStatus;
   lines?: InvoiceLine[];
+  cheques?: Cheque[];
+}
+
+export interface Cheque {
+  id?: ID;
+  cheque_no: string | null;
+  cheque_date: string | null;
+  amount: string | number;
 }
 
 export interface GrnLine {

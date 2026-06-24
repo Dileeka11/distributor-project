@@ -42,7 +42,11 @@ export default function DashboardPage() {
         <div className="card">
           <div className="flex items-center justify-between px-5 py-4 border-b border-border">
             <div>
-              <div className="text-[14.5px] font-bold">Sales — last 14 days</div>
+              <div className="text-[14.5px] font-bold">
+                Sales — {data.sales_series.length
+                  ? `${data.sales_series[0].label} – ${data.sales_series[data.sales_series.length - 1].label}`
+                  : 'last 14 days'}
+              </div>
               <div className="flex gap-4 mt-1.5">
                 <span className="flex items-center gap-1.5 text-[12px]" style={{ color: 'var(--text-muted)' }}><span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--blue)' }} />Cash</span>
                 <span className="flex items-center gap-1.5 text-[12px]" style={{ color: 'var(--text-muted)' }}><span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--accent)' }} />Credit</span>

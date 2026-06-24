@@ -3,6 +3,7 @@
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\CustomerController;
+use App\Http\Controllers\CustomerTypeController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\GrnController;
 use App\Http\Controllers\InvoiceController;
@@ -23,6 +24,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index']);
 
     Route::get('/categories', [CategoryController::class, 'index']);
+    Route::post('/categories', [CategoryController::class, 'store']);
+    Route::put('/categories/{category}', [CategoryController::class, 'update']);
+    Route::delete('/categories/{category}', [CategoryController::class, 'destroy']);
+
+    Route::get('/customer-types', [CustomerTypeController::class, 'index']);
+    Route::post('/customer-types', [CustomerTypeController::class, 'store']);
+    Route::put('/customer-types/{customerType}', [CustomerTypeController::class, 'update']);
+    Route::delete('/customer-types/{customerType}', [CustomerTypeController::class, 'destroy']);
 
     Route::apiResource('items', ItemController::class)->only(['index', 'store', 'update', 'destroy']);
     Route::apiResource('suppliers', SupplierController::class)->only(['index', 'store', 'update', 'destroy']);
@@ -31,6 +40,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/invoices', [InvoiceController::class, 'index']);
     Route::post('/invoices', [InvoiceController::class, 'store']);
     Route::get('/invoices/{invoice}', [InvoiceController::class, 'show']);
+    Route::put('/invoices/{invoice}', [InvoiceController::class, 'update']);
+    Route::delete('/invoices/{invoice}', [InvoiceController::class, 'destroy']);
 
     Route::get('/grns', [GrnController::class, 'index']);
     Route::post('/grns', [GrnController::class, 'store']);

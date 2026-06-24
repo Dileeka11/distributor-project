@@ -11,12 +11,12 @@ class ItemController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $q = $request->string('q')->trim();
-        $category = $request->integer('category_id');
+        $q = trim((string) $request->input('q'));
+        $category = (int) $request->input('category_id');
 
         $items = Item::query()
             ->with('category:id,name')
-            ->when($q->isNotEmpty(), fn ($qb) => $qb->where(function ($w) use ($q) {
+            ->when($q !== '', fn ($qb) => $qb->where(function ($w) use ($q) {
                 $w->where('name', 'like', "%{$q}%")->orWhere('code', 'like', "%{$q}%");
             }))
             ->when($category, fn ($qb) => $qb->where('category_id', $category))

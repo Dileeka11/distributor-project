@@ -1,18 +1,37 @@
-// Minimal toast — replaces console-only feedback for mutations
+import Swal from 'sweetalert2';
+
+const cssVar = (name: string, fallback: string) =>
+  getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+
+// Corner toast used for every create / update / delete / error feedback.
+const ToastMixin = Swal.mixin({
+  toast: true,
+  position: 'bottom-end',
+  showConfirmButton: false,
+  timer: 2600,
+  timerProgressBar: true,
+  didOpen: (el) => {
+    el.addEventListener('mouseenter', Swal.stopTimer);
+    el.addEventListener('mouseleave', Swal.resumeTimer);
+  },
+});
+
 export function toast(msg: string, kind: 'ok' | 'err' = 'ok'): void {
-  const el = document.createElement('div');
-  el.textContent = msg;
-  el.style.cssText = [
-    'position:fixed', 'right:20px', 'bottom:20px',
-    'padding:11px 16px', 'border-radius:9px',
-    'font-size:13px', 'font-weight:600', 'z-index:9999',
-    `background:${kind === 'ok' ? 'var(--green-soft)' : 'var(--red-soft)'}`,
-    `color:${kind === 'ok' ? 'var(--green)' : 'var(--red)'}`,
-    `border:1px solid ${kind === 'ok' ? 'var(--green)' : 'var(--red)'}`,
-    'box-shadow:0 4px 14px rgba(15,18,25,.08)',
-    'animation:fade .2s ease',
-  ].join(';');
-  document.body.appendChild(el);
-  setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity .2s'; }, 2300);
-  setTimeout(() => el.remove(), 2700);
+  void ToastMixin.fire({ icon: kind === 'ok' ? 'success' : 'error', title: msg });
+}
+
+// SweetAlert confirmation used for destructive actions (delete).
+export function confirmDelete(opts: { title?: string; html?: string; confirmText?: string } = {}): Promise<boolean> {
+  return Swal.fire({
+    title: opts.title ?? 'Are you sure?',
+    html: opts.html,
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonText: opts.confirmText ?? 'Yes, delete',
+    cancelButtonText: 'Cancel',
+    confirmButtonColor: cssVar('--accent', '#C8102E'),
+    cancelButtonColor: '#9aa1ab',
+    reverseButtons: true,
+    focusCancel: true,
+  }).then((r) => r.isConfirmed);
 }

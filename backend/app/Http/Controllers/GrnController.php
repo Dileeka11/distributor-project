@@ -15,16 +15,16 @@ class GrnController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $q = $request->string('q')->trim();
-        $type = $request->string('type')->trim();
+        $q = trim((string) $request->input('q'));
+        $type = trim((string) $request->input('type'));
 
         $rows = Grn::query()
             ->with(['supplier:id,code,name,address', 'lines'])
-            ->when($q->isNotEmpty(), fn ($qb) => $qb->where(function ($w) use ($q) {
+            ->when($q !== '', fn ($qb) => $qb->where(function ($w) use ($q) {
                 $w->where('no', 'like', "%{$q}%")
                     ->orWhereHas('supplier', fn ($c) => $c->where('name', 'like', "%{$q}%"));
             }))
-            ->when(in_array($type->toString(), ['cash', 'credit']), fn ($qb) => $qb->where('type', $type))
+            ->when(in_array($type, ['cash', 'credit']), fn ($qb) => $qb->where('type', $type))
             ->orderByDesc('date')->orderByDesc('id')
             ->limit(500)
             ->get();

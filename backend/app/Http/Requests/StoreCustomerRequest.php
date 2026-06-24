@@ -23,8 +23,13 @@ class StoreCustomerRequest extends FormRequest
             'phone' => ['nullable', 'string', 'max:40'],
             'email' => ['nullable', 'email', 'max:120'],
             'address' => ['nullable', 'string', 'max:500'],
+            'city' => ['nullable', 'string', 'max:120'],
             'type' => ['nullable', 'string', 'max:40'],
+            'cash_discount' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'cheque_discount' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'terms_days' => ['nullable', 'integer', 'min:0', 'max:3650'],
             'credit_limit' => ['nullable', 'numeric', 'min:0'],
+            'description' => ['nullable', 'string', 'max:2000'],
         ];
     }
 }
