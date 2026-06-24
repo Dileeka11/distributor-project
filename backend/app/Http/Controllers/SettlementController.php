@@ -139,6 +139,7 @@ class SettlementController extends Controller
                 'amount' => $amount,
                 'mode' => $data['mode'],
                 'reference' => $data['reference'] ?? null,
+                'cheque_date' => ($data['mode'] === 'Cheque') ? ($data['cheque_date'] ?? null) : null,
                 'created_by' => optional($request->user())->id,
             ]);
         });

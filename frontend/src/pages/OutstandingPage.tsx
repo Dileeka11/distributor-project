@@ -207,7 +207,10 @@ export default function OutstandingPage() {
                   <td className="text-[12px]" style={{ color: 'var(--text-muted)' }}>{prettyDate(s.date)}</td>
                   <td className="font-semibold">{s.customer?.name ?? s.supplier?.name ?? '—'}</td>
                   <td><Badge kind={s.side === 'receivable' ? 'green' : 'blue'}>{s.side === 'receivable' ? 'Collected' : 'Paid out'}</Badge></td>
-                  <td className="text-[12px]" style={{ color: 'var(--text-muted)' }}>{s.mode}</td>
+                  <td className="text-[12px]" style={{ color: 'var(--text-muted)' }}>
+                    {s.mode}{s.mode === 'Cheque' && s.reference ? ` · ${s.reference}` : ''}
+                    {s.mode === 'Cheque' && s.cheque_date ? ` (${prettyDate(s.cheque_date)})` : ''}
+                  </td>
                   <td className="num money font-bold">{fmt(s.amount as number)}</td>
                 </tr>
               ))}
@@ -227,6 +230,8 @@ function SettleModal({ side, rec, onClose, onSaved }: { side: Tab; rec: Customer
     : Number((rec as Supplier).payable);
   const [amount, setAmount] = useState(String(outstanding));
   const [mode, setMode] = useState('Bank Transfer');
+  const [chequeNo, setChequeNo] = useState('');
+  const [chequeDate, setChequeDate] = useState('');
   const [busy, setBusy] = useState(false);
   const amt = Math.min(Number(amount) || 0, outstanding);
   const remaining = outstanding - amt;
@@ -235,7 +240,11 @@ function SettleModal({ side, rec, onClose, onSaved }: { side: Tab; rec: Customer
     if (amt <= 0) return;
     setBusy(true);
     try {
-      await http.post('/api/settlements', { side, party_id: rec.id, amount: amt, mode });
+      await http.post('/api/settlements', {
+        side, party_id: rec.id, amount: amt, mode,
+        reference: chequeNo.trim() || null,
+        cheque_date: mode === 'Cheque' ? (chequeDate || null) : null,
+      });
       toast(side === 'receivable' ? 'Receipt recorded' : 'Payment recorded');
       onSaved();
     } catch (e) { toast(apiErrorMessage(e), 'err'); }
@@ -265,6 +274,13 @@ function SettleModal({ side, rec, onClose, onSaved }: { side: Tab; rec: Customer
         <Field label="Amount (LKR)" req><MoneyInput value={amount} onChange={setAmount} /></Field>
         <Field label="Payment mode"><Select value={mode} onChange={(e) => setMode(e.target.value)}>{['Bank Transfer', 'Cash', 'Cheque', 'Card', 'Online'].map((m) => <option key={m}>{m}</option>)}</Select></Field>
       </div>
+
+      {mode === 'Cheque' && (
+        <div className="grid grid-cols-2 gap-4 mt-4">
+          <Field label="Cheque no."><Input className="mono" value={chequeNo} onChange={(e) => setChequeNo(e.target.value)} placeholder="e.g. 6622" /></Field>
+          <Field label="Cheque date"><Input type="date" value={chequeDate} onChange={(e) => setChequeDate(e.target.value)} /></Field>
+        </div>
+      )}
 
       <div className="h-px my-4" style={{ background: 'var(--border)' }} />
       <div className="flex justify-between text-[14px]">

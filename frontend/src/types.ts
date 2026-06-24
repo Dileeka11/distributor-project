@@ -159,6 +159,7 @@ export interface Settlement {
   amount: string | number;
   mode: string;
   reference?: string | null;
+  cheque_date?: string | null;
 }
 
 export interface AppSettings {

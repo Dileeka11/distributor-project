@@ -12,11 +12,12 @@ class Settlement extends Model
 
     protected $fillable = [
         'code', 'date', 'side', 'customer_id', 'supplier_id',
-        'amount', 'mode', 'reference', 'created_by',
+        'amount', 'mode', 'reference', 'cheque_date', 'created_by',
     ];
 
     protected $casts = [
         'date' => 'date',
+        'cheque_date' => 'date',
         'amount' => 'decimal:2',
     ];
 
