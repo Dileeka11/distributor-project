@@ -21,7 +21,8 @@ class StoreGrnRequest extends FormRequest
             'lines' => ['required', 'array', 'min:1'],
             'lines.*.item_id' => ['required', 'exists:items,id'],
             'lines.*.qty' => ['required', 'numeric', 'min:0.01'],
-            'lines.*.price' => ['required', 'numeric', 'min:0'],
+            'lines.*.unit_price' => ['required', 'numeric', 'min:0'],
+            'lines.*.discount' => ['nullable', 'numeric', 'min:0', 'max:100'],
         ];
     }
 }

@@ -9,6 +9,16 @@ use Illuminate\Http\Request;
 
 class ItemController extends Controller
 {
+    public function batches(Item $item): JsonResponse
+    {
+        $batches = $item->batches()
+            ->where('qty_remaining', '>', 0)
+            ->orderBy('id')
+            ->get(['id', 'unit_price', 'discount', 'unit_cost', 'qty_remaining']);
+
+        return response()->json(['data' => $batches]);
+    }
+
     public function index(Request $request): JsonResponse
     {
         $q = trim((string) $request->input('q'));

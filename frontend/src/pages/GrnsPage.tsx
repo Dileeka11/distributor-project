@@ -15,8 +15,9 @@ import type { Grn, Item, Supplier } from '@/types';
 
 type Tab = 'all' | 'cash' | 'credit';
 
-interface DraftLine { item_id: number | ''; qty: string; price: string; }
-const blankLine = (): DraftLine => ({ item_id: '', qty: '1', price: '0' });
+interface DraftLine { item_id: number | ''; qty: string; unit_price: string; discount: string; }
+const blankLine = (): DraftLine => ({ item_id: '', qty: '1', unit_price: '0', discount: '0' });
+const unitCost = (l: DraftLine) => (Number(l.unit_price) || 0) * (1 - (Number(l.discount) || 0) / 100);
 
 export default function GrnsPage() {
   const [rows, setRows] = useState<Grn[]>([]);
@@ -104,7 +105,7 @@ function CreateGrn({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
   }, []);
 
   const totals = useMemo(() => {
-    const subtotal = lines.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.price) || 0), 0);
+    const subtotal = lines.reduce((s, l) => s + (Number(l.qty) || 0) * unitCost(l), 0);
     const taxAmt = (subtotal * taxRate) / 100;
     const total = subtotal + taxAmt;
     const paidNum = type === 'cash' ? total : Math.min(Number(paid) || 0, total);
@@ -118,7 +119,7 @@ function CreateGrn({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
     setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
   const pickItem = (i: number, id: number | '') => {
     const item = items.find((x) => x.id === id);
-    setLine(i, { item_id: id, price: item ? String(item.distributor_price) : '0' });
+    setLine(i, { item_id: id, unit_price: item ? String(item.distributor_price) : '0' });
   };
   const addLine = () => setLines((ls) => [...ls, blankLine()]);
   const delLine = (i: number) => setLines((ls) => (ls.length > 1 ? ls.filter((_, idx) => idx !== i) : ls));
@@ -133,7 +134,7 @@ function CreateGrn({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
       await http.post('/api/grns', {
         type, supplier_id: supplierId, tax_rate: taxRate,
         paid: type === 'cash' ? totals.total : Number(paid) || 0,
-        lines: validLines.map((l) => ({ item_id: l.item_id, qty: Number(l.qty), price: Number(l.price) })),
+        lines: validLines.map((l) => ({ item_id: l.item_id, qty: Number(l.qty), unit_price: Number(l.unit_price) || 0, discount: Number(l.discount) || 0 })),
       });
       toast('GRN created');
       onSaved();
@@ -143,7 +144,7 @@ function CreateGrn({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
 
   return (
     <Modal
-      lg
+      xl
       title="New Goods Received Note"
       onClose={onClose}
       footer={
@@ -191,10 +192,12 @@ function CreateGrn({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
         <table className="w-full border-collapse">
           <thead>
             <tr>
-              <th className="text-left text-[11px] uppercase tracking-wider font-bold p-2" style={{ color: 'var(--text-faint)', width: '44%' }}>Product</th>
-              <th className="text-right text-[11px] uppercase font-bold p-2" style={{ color: 'var(--text-faint)', width: 80 }}>Qty in</th>
-              <th className="text-right text-[11px] uppercase font-bold p-2" style={{ color: 'var(--text-faint)', width: 110 }}>Cost</th>
-              <th className="text-right text-[11px] uppercase font-bold p-2" style={{ color: 'var(--text-faint)' }}>Amount</th>
+              <th className="text-left text-[11px] uppercase tracking-wider font-bold p-2" style={{ color: 'var(--text-faint)', width: '30%' }}>Product</th>
+              <th className="text-right text-[11px] uppercase font-bold p-2" style={{ color: 'var(--text-faint)', width: 110 }}>Unit price</th>
+              <th className="text-right text-[11px] uppercase font-bold p-2" style={{ color: 'var(--text-faint)', width: 80 }}>Disc %</th>
+              <th className="text-right text-[11px] uppercase font-bold p-2" style={{ color: 'var(--text-faint)', width: 100 }}>Unit cost</th>
+              <th className="text-right text-[11px] uppercase font-bold p-2" style={{ color: 'var(--text-faint)', width: 70 }}>Qty in</th>
+              <th className="text-right text-[11px] uppercase font-bold p-2" style={{ color: 'var(--text-faint)' }}>Total cost</th>
               <th style={{ width: 36 }}></th>
             </tr>
           </thead>
@@ -208,11 +211,13 @@ function CreateGrn({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
                       <option value="">Select item…</option>
                       {items.map((x) => <option key={x.id} value={x.id}>{x.code} · {x.name}</option>)}
                     </Select>
-                    {it && <div className="text-[12px] mt-1" style={{ color: 'var(--text-muted)' }}>On hand: {fmt0(it.stock)} · cost Rs {fmt(it.distributor_price as number)}</div>}
+                    {it && <div className="text-[12px] mt-1" style={{ color: 'var(--text-muted)' }}>On hand: {fmt0(it.stock)} · last cost Rs {fmt(it.distributor_price as number)}</div>}
                   </td>
+                  <td className="p-1.5"><Input className="mono text-right" value={l.unit_price} onChange={(e) => setLine(i, { unit_price: e.target.value.replace(/[^\d.]/g, '') })} style={{ height: 36 }} /></td>
+                  <td className="p-1.5"><Input className="mono text-right" value={l.discount} onChange={(e) => setLine(i, { discount: e.target.value.replace(/[^\d.]/g, '') })} style={{ height: 36 }} /></td>
+                  <td className="p-1.5 text-right money" style={{ color: 'var(--text-muted)' }}>{fmt(unitCost(l))}</td>
                   <td className="p-1.5"><Input className="mono text-right" value={l.qty} onChange={(e) => setLine(i, { qty: e.target.value.replace(/\D/g, '') })} style={{ height: 36 }} /></td>
-                  <td className="p-1.5"><Input className="mono text-right" value={l.price} onChange={(e) => setLine(i, { price: e.target.value.replace(/[^\d.]/g, '') })} style={{ height: 36 }} /></td>
-                  <td className="p-1.5 text-right money font-semibold">{fmt((Number(l.qty) || 0) * (Number(l.price) || 0))}</td>
+                  <td className="p-1.5 text-right money font-semibold">{fmt((Number(l.qty) || 0) * unitCost(l))}</td>
                   <td className="p-1.5 text-right">
                     <button className="grid place-items-center w-7 h-7 rounded-md hover:bg-surface-2" onClick={() => delLine(i)} type="button"><X size={15} /></button>
                   </td>

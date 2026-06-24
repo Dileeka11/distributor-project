@@ -7,10 +7,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class GrnLine extends Model
 {
-    protected $fillable = ['grn_id', 'item_id', 'name', 'qty', 'price', 'total'];
+    protected $fillable = ['grn_id', 'item_id', 'name', 'qty', 'unit_price', 'discount', 'price', 'total'];
 
     protected $casts = [
         'qty' => 'decimal:2',
+        'unit_price' => 'decimal:2',
+        'discount' => 'decimal:2',
         'price' => 'decimal:2',
         'total' => 'decimal:2',
     ];

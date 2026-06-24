@@ -34,6 +34,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/customer-types/{customerType}', [CustomerTypeController::class, 'update']);
     Route::delete('/customer-types/{customerType}', [CustomerTypeController::class, 'destroy']);
 
+    Route::get('/items/{item}/batches', [ItemController::class, 'batches']);
     Route::apiResource('items', ItemController::class)->only(['index', 'store', 'update', 'destroy']);
     Route::apiResource('suppliers', SupplierController::class)->only(['index', 'store', 'update', 'destroy']);
     Route::apiResource('customers', CustomerController::class)->only(['index', 'store', 'update', 'destroy']);

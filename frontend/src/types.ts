@@ -52,10 +52,19 @@ export type TxnStatus = 'paid' | 'partial' | 'unpaid';
 export interface InvoiceLine {
   id?: ID;
   item_id: ID;
+  batch_id?: ID | null;
   name: string;
   qty: string | number;
   price: string | number;
   total: string | number;
+}
+
+export interface ItemBatch {
+  id: ID;
+  unit_price: string | number;
+  discount: string | number;
+  unit_cost: string | number;
+  qty_remaining: number;
 }
 
 export interface Invoice {

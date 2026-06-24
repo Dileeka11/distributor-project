@@ -22,6 +22,7 @@ class StoreInvoiceRequest extends FormRequest
             'paid' => ['nullable', 'numeric', 'min:0'],
             'lines' => ['required', 'array', 'min:1'],
             'lines.*.item_id' => ['required', 'exists:items,id'],
+            'lines.*.batch_id' => ['nullable', 'exists:item_batches,id'],
             'lines.*.qty' => ['required', 'numeric', 'min:0.01'],
             'lines.*.price' => ['required', 'numeric', 'min:0'],
             'cheques' => ['nullable', 'array'],

@@ -6,6 +6,7 @@ use App\Http\Requests\StoreInvoiceRequest;
 use App\Models\Customer;
 use App\Models\Invoice;
 use App\Models\Item;
+use App\Models\ItemBatch;
 use App\Services\NumberService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -97,24 +98,34 @@ class InvoiceController extends Controller
     {
         $customer = Customer::query()->findOrFail($data['customer_id']);
 
-        // Lock items
+        // Lock items + the chosen cost-batches
         $itemIds = collect($data['lines'])->pluck('item_id')->unique();
         $items = Item::query()->whereIn('id', $itemIds)->lockForUpdate()->get()->keyBy('id');
+        $batchIds = collect($data['lines'])->pluck('batch_id')->filter()->unique();
+        $batches = ItemBatch::query()->whereIn('id', $batchIds)->lockForUpdate()->get()->keyBy('id');
 
         $subtotal = 0;
         $linesOut = [];
         foreach ($data['lines'] as $line) {
             /** @var Item $item */
             $item = $items[$line['item_id']];
-            $qty = (float) $line['qty'];
+            $qty = (int) $line['qty'];
             $price = (float) $line['price'];
+            $batchId = $line['batch_id'] ?? null;
 
-            abort_if($item->stock < $qty, 422, "Insufficient stock for {$item->name}");
+            if ($batchId) {
+                $batch = $batches[$batchId] ?? null;
+                abort_if(! $batch || (int) $batch->item_id !== (int) $item->id, 422, "Invalid batch for {$item->name}");
+                abort_if($batch->qty_remaining < $qty, 422, "Only {$batch->qty_remaining} left in the selected batch for {$item->name}");
+            } else {
+                abort_if($item->stock < $qty, 422, "Insufficient stock for {$item->name}");
+            }
 
             $total = round($qty * $price, 2);
             $subtotal += $total;
             $linesOut[] = [
                 'item_id' => $item->id,
+                'batch_id' => $batchId,
                 'name' => $item->name,
                 'qty' => $qty,
                 'price' => $price,
@@ -154,6 +165,9 @@ class InvoiceController extends Controller
         foreach ($linesOut as $row) {
             $invoice->lines()->create($row);
             $items[$row['item_id']]->decrement('stock', (int) $row['qty']);
+            if ($row['batch_id'] && isset($batches[$row['batch_id']])) {
+                $batches[$row['batch_id']]->decrement('qty_remaining', (int) $row['qty']);
+            }
         }
 
         // Cheque details (record-only — they do not affect the paid/outstanding amounts).
@@ -179,6 +193,9 @@ class InvoiceController extends Controller
 
         foreach ($invoice->lines as $line) {
             Item::query()->whereKey($line->item_id)->increment('stock', (int) $line->qty);
+            if ($line->batch_id) {
+                ItemBatch::query()->whereKey($line->batch_id)->increment('qty_remaining', (int) $line->qty);
+            }
         }
 
         if ($invoice->type === 'credit') {

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StoreGrnRequest;
 use App\Models\Grn;
 use App\Models\Item;
+use App\Models\ItemBatch;
 use App\Models\Supplier;
 use App\Services\NumberService;
 use Illuminate\Http\JsonResponse;
@@ -54,14 +55,18 @@ class GrnController extends Controller
                 /** @var Item $item */
                 $item = $items[$line['item_id']];
                 $qty = (float) $line['qty'];
-                $price = (float) $line['price'];
-                $total = round($qty * $price, 2);
+                $unitPrice = (float) $line['unit_price'];
+                $discount = (float) ($line['discount'] ?? 0);
+                $unitCost = round($unitPrice * (1 - $discount / 100), 2);
+                $total = round($qty * $unitCost, 2);
                 $subtotal += $total;
                 $linesOut[] = [
                     'item_id' => $item->id,
                     'name' => $item->name,
                     'qty' => $qty,
-                    'price' => $price,
+                    'unit_price' => $unitPrice,
+                    'discount' => $discount,
+                    'price' => $unitCost,
                     'total' => $total,
                 ];
             }
@@ -91,6 +96,16 @@ class GrnController extends Controller
             foreach ($linesOut as $row) {
                 $grn->lines()->create($row);
                 $items[$row['item_id']]->increment('stock', (int) $row['qty']);
+                // Each receipt becomes a cost-batch that invoices can sell from.
+                ItemBatch::query()->create([
+                    'item_id' => $row['item_id'],
+                    'grn_id' => $grn->id,
+                    'unit_price' => $row['unit_price'],
+                    'discount' => $row['discount'],
+                    'unit_cost' => $row['price'],
+                    'qty_in' => (int) $row['qty'],
+                    'qty_remaining' => (int) $row['qty'],
+                ]);
             }
 
             if ($type === 'credit' && $balance > 0) {

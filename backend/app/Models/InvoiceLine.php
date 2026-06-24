@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class InvoiceLine extends Model
 {
-    protected $fillable = ['invoice_id', 'item_id', 'name', 'qty', 'price', 'total'];
+    protected $fillable = ['invoice_id', 'item_id', 'batch_id', 'name', 'qty', 'price', 'total'];
 
     protected $casts = [
         'qty' => 'decimal:2',

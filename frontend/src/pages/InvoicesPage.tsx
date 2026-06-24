@@ -11,12 +11,12 @@ import { Badge, statusBadge } from '@/components/ui/Badge';
 import { SearchBar, Empty, Segmented, Stat } from '@/components/ui/Common';
 import { Modal } from '@/components/ui/Modal';
 import { Field, Select, MoneyInput, Input } from '@/components/ui/Field';
-import type { Customer, Invoice, Item } from '@/types';
+import type { Customer, Invoice, Item, ItemBatch } from '@/types';
 
 type Tab = 'all' | 'cash' | 'credit';
 
-interface DraftLine { item_id: number | ''; qty: string; price: string; }
-const blankLine = (): DraftLine => ({ item_id: '', qty: '1', price: '0' });
+interface DraftLine { item_id: number | ''; batch_id: number | ''; qty: string; price: string; }
+const blankLine = (): DraftLine => ({ item_id: '', batch_id: '', qty: '1', price: '0' });
 
 interface ChequeRow { no: string; date: string; amount: string; }
 
@@ -129,7 +129,8 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
       setDiscCash(Number(d.cash_discount) > 0);
       setDiscCheque(Number(d.cheque_discount) > 0);
       setTaxRate(Number(d.tax_rate));
-      setLines((d.lines ?? []).map((l) => ({ item_id: Number(l.item_id), qty: String(Number(l.qty)), price: String(Number(l.price)) })));
+      setLines((d.lines ?? []).map((l) => ({ item_id: Number(l.item_id), batch_id: l.batch_id ? Number(l.batch_id) : '', qty: String(Number(l.qty)), price: String(Number(l.price)) })));
+      (d.lines ?? []).forEach((l) => loadBatches(Number(l.item_id)));
       setPaid(d.type === 'credit' ? String(Number(d.paid)) : '');
       setCheques((d.cheques ?? []).map((c) => ({ no: c.cheque_no ?? '', date: c.cheque_date ? String(c.cheque_date).slice(0, 10) : '', amount: String(Number(c.amount)) })));
     });
@@ -143,12 +144,19 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [items, setItems] = useState<Item[]>([]);
+  const [batchesByItem, setBatchesByItem] = useState<Record<number, ItemBatch[]>>({});
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     void http.get('/api/customers').then((r) => setCustomers(r.data.data));
     void http.get('/api/items').then((r) => setItems(r.data.data));
   }, []);
+
+  const loadBatches = (itemId: number) => {
+    if (!itemId) return;
+    void http.get(`/api/items/${itemId}/batches`).then((r) => setBatchesByItem((m) => ({ ...m, [itemId]: r.data.data })));
+  };
+  const batchesFor = (l: DraftLine) => (l.item_id ? batchesByItem[Number(l.item_id)] ?? [] : []);
 
   const cust = customers.find((c) => c.id === customerId);
   const cashPct = cust ? Number(cust.cash_discount) : 0;
@@ -179,12 +187,13 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
     setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
   const pickItem = (i: number, id: number | '') => {
     const item = items.find((x) => x.id === id);
-    setLine(i, { item_id: id, price: item ? String(item.wholesale_price) : '0' });
+    setLine(i, { item_id: id, batch_id: '', price: item ? String(item.wholesale_price) : '0' });
+    if (id) loadBatches(Number(id));
   };
   const addLine = () => setLines((ls) => [...ls, blankLine()]);
   const delLine = (i: number) => setLines((ls) => (ls.length > 1 ? ls.filter((_, idx) => idx !== i) : ls));
 
-  const validLines = lines.filter((l) => l.item_id !== '' && Number(l.qty) > 0);
+  const validLines = lines.filter((l) => l.item_id !== '' && Number(l.qty) > 0 && (batchesFor(l).length === 0 || l.batch_id !== ''));
   const canSave = customerId !== '' && validLines.length > 0 && !busy;
 
   const save = async () => {
@@ -194,7 +203,7 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
       const payload = {
         type, customer_id: customerId, tax_rate: taxRate, cash_discount: discCash, cheque_discount: discCheque,
         paid: type === 'cash' ? totals.total : Number(paid) || 0,
-        lines: validLines.map((l) => ({ item_id: l.item_id, qty: Number(l.qty), price: Number(l.price) })),
+        lines: validLines.map((l) => ({ item_id: l.item_id, batch_id: l.batch_id || null, qty: Number(l.qty), price: Number(l.price) })),
         cheques: type === 'credit'
           ? cheques
               .filter((c) => c.no.trim() || c.date || Number(c.amount) > 0)
@@ -288,6 +297,12 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
                         </option>
                       ))}
                     </Select>
+                    {batchesFor(l).length > 0 && (
+                      <Select value={l.batch_id === '' ? '' : String(l.batch_id)} onChange={(e) => setLine(i, { batch_id: e.target.value ? Number(e.target.value) : '' })} style={{ height: 32, fontSize: 12, marginTop: 6 }}>
+                        <option value="">Select cost-batch…</option>
+                        {batchesFor(l).map((b) => <option key={b.id} value={b.id}>Cost Rs {fmt(b.unit_cost as number)} · {b.qty_remaining} left</option>)}
+                      </Select>
+                    )}
                     {it && <div className="text-[12px] mt-1" style={{ color: 'var(--text-muted)' }}>Stock: {fmt0(it.stock)} · WP Rs {fmt(it.wholesale_price as number)}</div>}
                   </td>
                   <td className="p-1.5"><Input className="mono text-right" value={l.qty} onChange={(e) => setLine(i, { qty: e.target.value.replace(/\D/g, '') })} style={{ height: 36 }} /></td>
