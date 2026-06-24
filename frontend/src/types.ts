@@ -85,6 +85,20 @@ export interface Cheque {
   amount: string | number;
 }
 
+export interface ChequeRecord {
+  id: ID;
+  invoice_id: ID;
+  invoice_no: string;
+  customer_id: ID;
+  customer_name: string;
+  cheque_no: string | null;
+  cheque_date: string | null;
+  amount: string | number;
+  invoice_total: string | number;
+  invoice_paid: string | number;
+  cleared: boolean;
+}
+
 export interface GrnLine {
   id?: ID;
   item_id: ID;

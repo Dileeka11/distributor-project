@@ -2,14 +2,14 @@ import { useEffect, useState } from 'react';
 import { Truck, Wallet, Scale, Check } from 'lucide-react';
 import { http, apiErrorMessage } from '@/lib/http';
 import { fmt, fmt0, compact, prettyDate, initials } from '@/lib/format';
-import { toast } from '@/lib/toast';
+import { toast, confirmDelete } from '@/lib/toast';
 import { PageHead } from '@/components/PageHead';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Segmented, Stat, Empty, Avatar } from '@/components/ui/Common';
 import { Modal } from '@/components/ui/Modal';
 import { Field, Select, MoneyInput } from '@/components/ui/Field';
-import type { Customer, Settlement, Supplier } from '@/types';
+import type { ChequeRecord, Customer, Settlement, Supplier } from '@/types';
 
 type Tab = 'receivable' | 'payable';
 
@@ -18,18 +18,37 @@ export default function OutstandingPage() {
   const [receivables, setReceivables] = useState<Customer[]>([]);
   const [payables, setPayables] = useState<Supplier[]>([]);
   const [history, setHistory] = useState<Settlement[]>([]);
+  const [cheques, setCheques] = useState<ChequeRecord[]>([]);
   const [target, setTarget] = useState<{ side: Tab; rec: Customer | Supplier } | null>(null);
 
   const load = async () => {
-    const [{ data: o }, { data: s }] = await Promise.all([
+    const [{ data: o }, { data: s }, { data: cq }] = await Promise.all([
       http.get('/api/outstanding'),
       http.get('/api/settlements'),
+      http.get('/api/cheques'),
     ]);
     setReceivables(o.receivables);
     setPayables(o.payables);
     setHistory(s.data);
+    setCheques(cq.data);
   };
   useEffect(() => { void load(); }, []);
+
+  const toggleCheque = async (c: ChequeRecord) => {
+    const ok = await confirmDelete({
+      title: c.cleared ? 'Un-clear this cheque?' : 'Mark cheque as cleared?',
+      html: c.cleared
+        ? `Reverse <b>${c.cheque_no || 'cheque'}</b> (Rs ${fmt0(Number(c.amount))})? This adds Rs ${fmt0(Number(c.amount))} back to ${c.customer_name}'s outstanding.`
+        : `Cheque <b>${c.cheque_no || ''}</b> for <b>Rs ${fmt0(Number(c.amount))}</b> passed? This reduces ${c.customer_name}'s outstanding by Rs ${fmt0(Number(c.amount))} (paid +Rs ${fmt0(Number(c.amount))}).`,
+      confirmText: c.cleared ? 'Yes, reverse' : 'Yes, cleared',
+    });
+    if (!ok) return;
+    try {
+      await http.post(`/api/cheques/${c.id}/toggle`);
+      toast(c.cleared ? 'Cheque reversed' : 'Cheque cleared');
+      void load();
+    } catch (e) { toast(apiErrorMessage(e), 'err'); }
+  };
 
   const totalRecv = receivables.reduce((s, c) => s + Number(c.credit_limit) + Number(c.balance), 0);
   const totalPay = payables.reduce((s, c) => s + Number(c.payable), 0);
@@ -106,6 +125,48 @@ export default function OutstandingPage() {
           </tbody>
         </table>
         {rows.length === 0 && <Empty icon={<Check size={40} />} title="All settled" sub={`No outstanding ${tab === 'receivable' ? 'receivables' : 'payables'}.`} />}
+      </div>
+
+      <div className="card overflow-hidden mb-6">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <div className="text-[14.5px] font-bold">Cheque details</div>
+          <span className="chip">{cheques.filter((c) => !c.cleared).length} pending</span>
+        </div>
+        <table className="tbl">
+          <thead>
+            <tr>
+              <th>Invoice</th><th>Customer</th><th>Cheque No</th><th>Date</th>
+              <th className="num">Value</th><th className="num">Invoice total</th><th>Passed</th>
+            </tr>
+          </thead>
+          <tbody>
+            {cheques.map((c) => (
+              <tr key={c.id} style={c.cleared ? { background: 'var(--green-soft)' } : undefined}>
+                <td className="mono font-semibold">{c.invoice_no}</td>
+                <td className="font-medium">{c.customer_name}</td>
+                <td className="mono">{c.cheque_no || '—'}</td>
+                <td className="text-[12px]" style={{ color: 'var(--text-muted)' }}>{c.cheque_date ? prettyDate(c.cheque_date) : '—'}</td>
+                <td className="num money font-bold">{fmt(c.amount as number)}</td>
+                <td className="num money" style={{ color: 'var(--text-muted)' }}>{fmt(c.invoice_total as number)}</td>
+                <td>
+                  <button
+                    type="button"
+                    onClick={() => void toggleCheque(c)}
+                    className="flex items-center gap-2 text-[13px]"
+                    title={c.cleared ? 'Cleared — click to reverse' : 'Mark as cleared'}
+                  >
+                    <span className="grid place-items-center w-[18px] h-[18px] rounded-[5px] border flex-shrink-0"
+                      style={{ background: c.cleared ? 'var(--green)' : 'var(--surface)', borderColor: c.cleared ? 'var(--green)' : 'var(--border-strong)' }}>
+                      {c.cleared && <Check size={13} color="white" strokeWidth={3} />}
+                    </span>
+                    <span style={{ color: c.cleared ? 'var(--green)' : 'var(--text-muted)' }}>{c.cleared ? 'Cleared' : 'Pending'}</span>
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {cheques.length === 0 && <Empty icon={<Check size={40} />} title="No cheques" sub="Cheques recorded on credit invoices appear here." />}
       </div>
 
       <div className="card">

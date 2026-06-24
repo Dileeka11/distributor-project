@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CategoryController;
+use App\Http\Controllers\ChequeController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\CustomerTypeController;
 use App\Http\Controllers\DashboardController;
@@ -46,6 +47,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/grns', [GrnController::class, 'index']);
     Route::post('/grns', [GrnController::class, 'store']);
     Route::get('/grns/{grn}', [GrnController::class, 'show']);
+
+    Route::get('/cheques', [ChequeController::class, 'index']);
+    Route::post('/cheques/{cheque}/toggle', [ChequeController::class, 'toggle']);
 
     Route::get('/settlements', [SettlementController::class, 'index']);
     Route::post('/settlements', [SettlementController::class, 'store']);
