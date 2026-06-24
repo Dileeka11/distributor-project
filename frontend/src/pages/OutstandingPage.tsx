@@ -141,8 +141,10 @@ export default function OutstandingPage() {
 
       <div className="card overflow-hidden mb-6">
         <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-border">
-          <div className="text-[14.5px] font-bold whitespace-nowrap">Cheque details</div>
-          <Input value={chequeQ} onChange={(e) => setChequeQ(e.target.value)} placeholder="Search cheque no…" style={{ height: 34, maxWidth: 260 }} />
+          <div className="flex items-center gap-4">
+            <div className="text-[14.5px] font-bold whitespace-nowrap">Cheque details</div>
+            <Input value={chequeQ} onChange={(e) => setChequeQ(e.target.value)} placeholder="Search cheque no…" style={{ height: 34, width: 260 }} />
+          </div>
           <span className="chip whitespace-nowrap">{chequeRows.filter((c) => !c.cleared).length} pending</span>
         </div>
         <table className="tbl">
