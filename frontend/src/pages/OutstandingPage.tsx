@@ -31,7 +31,7 @@ export default function OutstandingPage() {
   };
   useEffect(() => { void load(); }, []);
 
-  const totalRecv = receivables.reduce((s, c) => s + Number(c.balance), 0);
+  const totalRecv = receivables.reduce((s, c) => s + Number(c.credit_limit) + Number(c.balance), 0);
   const totalPay = payables.reduce((s, c) => s + Number(c.payable), 0);
   const rows = tab === 'receivable' ? receivables : payables;
 
@@ -55,16 +55,18 @@ export default function OutstandingPage() {
             <tr>
               <th>{tab === 'receivable' ? 'Customer' : 'Supplier'}</th>
               <th>Contact</th>
-              {tab === 'receivable' && <th>Credit usage</th>}
+              {tab === 'receivable' && <th>Paid / Outstanding</th>}
               <th className="num">Outstanding</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => {
-              const amt = tab === 'receivable' ? Number((r as Customer).balance) : Number((r as Supplier).payable);
-              const lim = tab === 'receivable' ? Number((r as Customer).credit_limit) : 0;
-              const pct = lim ? Math.min(100, (amt / lim) * 100) : 0;
+              const isRec = tab === 'receivable';
+              const cust = r as Customer;
+              const paid = isRec ? Number(cust.paid_total ?? 0) : 0;
+              const outstanding = isRec ? Number(cust.credit_limit) + Number(cust.balance) : Number((r as Supplier).payable);
+              const payPct = isRec && paid + outstanding > 0 ? Math.min(100, (paid / (paid + outstanding)) * 100) : 0;
               return (
                 <tr key={r.id}>
                   <td>
@@ -83,13 +85,16 @@ export default function OutstandingPage() {
                     <div className="text-[12px]" style={{ color: 'var(--text-muted)' }}>{r.contact}</div>
                     <div className="text-[12px] mono" style={{ color: 'var(--text-muted)' }}>{r.phone}</div>
                   </td>
-                  {tab === 'receivable' && (
-                    <td style={{ minWidth: 130 }}>
-                      <div className="bar"><span style={{ width: `${pct}%`, background: amt > lim ? 'var(--red)' : 'var(--accent)' }} /></div>
-                      <div className="text-[12px] mono mt-1" style={{ color: 'var(--text-muted)' }}>{Math.round(pct)}% of Rs {fmt0(lim)}</div>
+                  {isRec && (
+                    <td style={{ minWidth: 160 }}>
+                      <div className="flex justify-between text-[11.5px] mb-1.5">
+                        <span className="mono" style={{ color: 'var(--green)' }}>{fmt0(paid)}</span>
+                        <span className="mono" style={{ color: 'var(--text-muted)' }}>{fmt0(outstanding)}</span>
+                      </div>
+                      <div className="bar"><span style={{ width: `${payPct}%`, background: 'var(--green)' }} /></div>
                     </td>
                   )}
-                  <td className="num money font-bold" style={{ color: 'var(--red)' }}>{fmt(amt)}</td>
+                  <td className="num money font-bold" style={{ color: 'var(--red)' }}>{fmt(outstanding)}</td>
                   <td className="num">
                     <Button variant="primary" size="sm" icon={<Check size={14} />} onClick={() => setTarget({ side: tab, rec: r })}>
                       {tab === 'receivable' ? 'Collect' : 'Pay'}

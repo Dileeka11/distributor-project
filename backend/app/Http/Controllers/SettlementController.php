@@ -28,9 +28,11 @@ class SettlementController extends Controller
     public function outstanding(): JsonResponse
     {
         $receivables = Customer::query()
-            ->where('balance', '>', 0)
-            ->orderByDesc('balance')
-            ->get(['id', 'code', 'name', 'contact', 'phone', 'address', 'credit_limit', 'balance', 'type']);
+            ->select(['id', 'code', 'name', 'contact', 'phone', 'address', 'credit_limit', 'balance', 'type'])
+            ->withSum('invoices as paid_total', 'paid')
+            ->where(fn ($q) => $q->where('balance', '>', 0)->orWhere('credit_limit', '>', 0))
+            ->orderByRaw('(credit_limit + balance) desc')
+            ->get();
 
         $payables = Supplier::query()
             ->where('payable', '>', 0)
