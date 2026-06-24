@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Segmented, Stat, Empty, Avatar } from '@/components/ui/Common';
 import { Modal } from '@/components/ui/Modal';
-import { Field, Select, MoneyInput } from '@/components/ui/Field';
+import { Field, Select, MoneyInput, Input } from '@/components/ui/Field';
 import type { ChequeRecord, Customer, Settlement, Supplier } from '@/types';
 
 type Tab = 'receivable' | 'payable';
@@ -19,6 +19,7 @@ export default function OutstandingPage() {
   const [payables, setPayables] = useState<Supplier[]>([]);
   const [history, setHistory] = useState<Settlement[]>([]);
   const [cheques, setCheques] = useState<ChequeRecord[]>([]);
+  const [chequeQ, setChequeQ] = useState('');
   const [target, setTarget] = useState<{ side: Tab; rec: Customer | Supplier } | null>(null);
 
   const load = async () => {
@@ -128,9 +129,10 @@ export default function OutstandingPage() {
       </div>
 
       <div className="card overflow-hidden mb-6">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <div className="text-[14.5px] font-bold">Cheque details</div>
-          <span className="chip">{cheques.filter((c) => !c.cleared).length} pending</span>
+        <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-border">
+          <div className="text-[14.5px] font-bold whitespace-nowrap">Cheque details</div>
+          <Input value={chequeQ} onChange={(e) => setChequeQ(e.target.value)} placeholder="Search cheque no…" style={{ height: 34, maxWidth: 260 }} />
+          <span className="chip whitespace-nowrap">{cheques.filter((c) => !c.cleared).length} pending</span>
         </div>
         <table className="tbl">
           <thead>
@@ -140,7 +142,15 @@ export default function OutstandingPage() {
             </tr>
           </thead>
           <tbody>
-            {cheques.map((c) => (
+            {cheques
+              .filter((c) => {
+                const q = chequeQ.trim().toLowerCase();
+                if (!q) return true;
+                return (c.cheque_no ?? '').toLowerCase().includes(q)
+                  || (c.invoice_no ?? '').toLowerCase().includes(q)
+                  || (c.customer_name ?? '').toLowerCase().includes(q);
+              })
+              .map((c) => (
               <tr key={c.id} style={c.cleared ? { background: 'var(--green-soft)' } : undefined}>
                 <td className="mono font-semibold">{c.invoice_no}</td>
                 <td className="font-medium">{c.customer_name}</td>
