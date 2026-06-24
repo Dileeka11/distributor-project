@@ -190,9 +190,11 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
         type, customer_id: customerId, tax_rate: taxRate, cash_discount: discCash, cheque_discount: discCheque,
         paid: type === 'cash' ? totals.total : Number(paid) || 0,
         lines: validLines.map((l) => ({ item_id: l.item_id, qty: Number(l.qty), price: Number(l.price) })),
-        cheques: cheques
-          .filter((c) => c.no.trim() || c.date || Number(c.amount) > 0)
-          .map((c) => ({ no: c.no.trim() || null, date: c.date || null, amount: Number(c.amount) || 0 })),
+        cheques: type === 'credit'
+          ? cheques
+              .filter((c) => c.no.trim() || c.date || Number(c.amount) > 0)
+              .map((c) => ({ no: c.no.trim() || null, date: c.date || null, amount: Number(c.amount) || 0 }))
+          : [],
       };
       if (isEdit) await http.put(`/api/invoices/${editInvoice!.id}`, payload);
       else await http.post('/api/invoices', payload);
@@ -310,6 +312,7 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
             </div>
           )}
 
+          {type === 'credit' && (
           <div className="mt-4">
             <div className="flex items-center justify-between mb-2">
               <div className="text-[13px] font-semibold" style={{ color: 'var(--text-muted)' }}>Cheque details</div>
@@ -333,6 +336,7 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
               </div>
             )}
           </div>
+          )}
         </div>
         <div className="rounded-[10px] p-4" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
           <TotalRow k="Subtotal" v={fmt(totals.subtotal)} />
