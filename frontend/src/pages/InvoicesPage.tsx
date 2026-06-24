@@ -167,7 +167,12 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
     return { subtotal, cashAmt, chequeAmt, discountAmt, taxable, taxAmt, total, paidNum, balance };
   }, [lines, taxRate, type, paid, discCash, discCheque, cashPct, chequePct]);
 
-  const newExposure = cust ? Number(cust.balance) + totals.balance : 0;
+  // In edit mode the customer's balance already includes this invoice's old outstanding,
+  // so remove that before adding the edited balance (otherwise it double-counts).
+  const editBalance = isEdit && editInvoice && editInvoice.type === 'credit'
+    ? Number(editInvoice.total) - Number(editInvoice.paid)
+    : 0;
+  const newExposure = cust ? Number(cust.balance) - editBalance + totals.balance : 0;
   const overLimit = type === 'credit' && cust && newExposure > Number(cust.credit_limit);
 
   const setLine = (i: number, patch: Partial<DraftLine>) =>
