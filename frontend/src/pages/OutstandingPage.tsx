@@ -77,7 +77,7 @@ export default function OutstandingPage() {
       </div>
 
       <div className="flex gap-2.5 mb-4">
-        <Segmented value={tab} onChange={setTab} options={[{ value: 'receivable', label: 'Receivables (Customers)' }, { value: 'payable', label: 'Payables (Suppliers)' }]} />
+        <Segmented accent value={tab} onChange={setTab} options={[{ value: 'receivable', label: 'Receivables (Customers)' }, { value: 'payable', label: 'Payables (Suppliers)' }]} />
       </div>
 
       <div className="card overflow-hidden mb-6">
