@@ -18,7 +18,7 @@ class SettlementController extends Controller
     public function index(Request $request): JsonResponse
     {
         $rows = Settlement::query()
-            ->with(['customer:id,code,name', 'supplier:id,code,name'])
+            ->with(['customer:id,code,name', 'supplier:id,code,name', 'cheques'])
             ->orderByDesc('date')->orderByDesc('id')
             ->limit(500)->get();
 
@@ -49,8 +49,30 @@ class SettlementController extends Controller
     {
         $data = $request->validated();
 
-        $settlement = DB::transaction(function () use ($data, $request) {
-            $amount = (float) $data['amount'];
+        // Normalise cheque rows — only meaningful when paying by cheque.
+        $chequeRows = [];
+        if ($data['mode'] === 'Cheque') {
+            foreach ($data['cheques'] ?? [] as $c) {
+                $no = trim((string) ($c['no'] ?? ''));
+                $amt = (float) ($c['amount'] ?? 0);
+                $date = $c['date'] ?? null;
+                if ($no === '' && ! $date && $amt <= 0) {
+                    continue; // skip blank rows
+                }
+                $chequeRows[] = ['cheque_no' => $no !== '' ? $no : null, 'cheque_date' => $date, 'amount' => $amt];
+            }
+            // Back-compat: a single cheque sent via reference / cheque_date.
+            if (empty($chequeRows) && ! empty($data['reference'])) {
+                $chequeRows[] = ['cheque_no' => $data['reference'], 'cheque_date' => $data['cheque_date'] ?? null, 'amount' => (float) $data['amount']];
+            }
+        }
+        $single = count($chequeRows) === 1 ? $chequeRows[0] : null;
+
+        $settlement = DB::transaction(function () use ($data, $request, $chequeRows, $single) {
+            // When paying by cheque, the amount is the sum of the cheque values.
+            $amount = ! empty($chequeRows)
+                ? round(array_sum(array_column($chequeRows, 'amount')), 2)
+                : (float) $data['amount'];
 
             if ($data['side'] === 'receivable') {
                 $customer = Customer::query()->whereKey($data['party_id'])->lockForUpdate()->firstOrFail();
@@ -130,7 +152,7 @@ class SettlementController extends Controller
                 $prefix = 'PAY-';
             }
 
-            return Settlement::query()->create([
+            $settlement = Settlement::query()->create([
                 'code' => NumberService::next(Settlement::class, $prefix, 3, 'code'),
                 'date' => now()->toDateString(),
                 'side' => $data['side'],
@@ -138,14 +160,22 @@ class SettlementController extends Controller
                 'supplier_id' => $supplierId,
                 'amount' => $amount,
                 'mode' => $data['mode'],
-                'reference' => $data['reference'] ?? null,
-                'cheque_date' => ($data['mode'] === 'Cheque') ? ($data['cheque_date'] ?? null) : null,
+                'reference' => $single ? $single['cheque_no'] : ($data['reference'] ?? null),
+                'cheque_date' => $data['mode'] === 'Cheque'
+                    ? ($single ? $single['cheque_date'] : ($data['cheque_date'] ?? null))
+                    : null,
                 'created_by' => optional($request->user())->id,
             ]);
+
+            foreach ($chequeRows as $row) {
+                $settlement->cheques()->create($row);
+            }
+
+            return $settlement;
         });
 
         return response()->json([
-            'data' => $settlement->load(['customer:id,code,name', 'supplier:id,code,name']),
+            'data' => $settlement->load(['customer:id,code,name', 'supplier:id,code,name', 'cheques']),
         ], 201);
     }
 }

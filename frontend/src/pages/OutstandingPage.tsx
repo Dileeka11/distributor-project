@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Truck, Wallet, Scale, Check } from 'lucide-react';
+import { Truck, Wallet, Scale, Check, Plus, X } from 'lucide-react';
 import { http, apiErrorMessage } from '@/lib/http';
 import { fmt, fmt0, compact, prettyDate, initials } from '@/lib/format';
 import { toast, confirmDelete } from '@/lib/toast';
@@ -208,8 +208,13 @@ export default function OutstandingPage() {
                   <td className="font-semibold">{s.customer?.name ?? s.supplier?.name ?? '—'}</td>
                   <td><Badge kind={s.side === 'receivable' ? 'green' : 'blue'}>{s.side === 'receivable' ? 'Collected' : 'Paid out'}</Badge></td>
                   <td className="text-[12px]" style={{ color: 'var(--text-muted)' }}>
-                    {s.mode}{s.mode === 'Cheque' && s.reference ? ` · ${s.reference}` : ''}
-                    {s.mode === 'Cheque' && s.cheque_date ? ` (${prettyDate(s.cheque_date)})` : ''}
+                    {s.mode}
+                    {s.mode === 'Cheque' && (s.cheques?.length ?? 0) > 1
+                      ? ` · ${s.cheques!.length} cheques`
+                      : <>
+                          {s.mode === 'Cheque' && s.reference ? ` · ${s.reference}` : ''}
+                          {s.mode === 'Cheque' && s.cheque_date ? ` (${prettyDate(s.cheque_date)})` : ''}
+                        </>}
                   </td>
                   <td className="num money font-bold">{fmt(s.amount as number)}</td>
                 </tr>
@@ -224,17 +229,32 @@ export default function OutstandingPage() {
   );
 }
 
+interface ChequeRow { no: string; date: string; amount: string; }
+
 function SettleModal({ side, rec, onClose, onSaved }: { side: Tab; rec: Customer | Supplier; onClose: () => void; onSaved: () => void }) {
   const outstanding = side === 'receivable'
     ? Number((rec as Customer).credit_limit) + Number((rec as Customer).balance)
     : Number((rec as Supplier).payable);
   const [amount, setAmount] = useState(String(outstanding));
   const [mode, setMode] = useState('Bank Transfer');
-  const [chequeNo, setChequeNo] = useState('');
-  const [chequeDate, setChequeDate] = useState('');
+  const [cheques, setCheques] = useState<ChequeRow[]>([]);
   const [busy, setBusy] = useState(false);
-  const amt = Math.min(Number(amount) || 0, outstanding);
+
+  const isCheque = mode === 'Cheque';
+  const chequeTotal = cheques.reduce((s, c) => s + (Number(c.amount) || 0), 0);
+  const amt = Math.min(isCheque ? chequeTotal : (Number(amount) || 0), outstanding);
   const remaining = outstanding - amt;
+
+  const addCheque = () => setCheques((cs) => [...cs, { no: '', date: '', amount: '' }]);
+  const delCheque = (i: number) => setCheques((cs) => cs.filter((_, idx) => idx !== i));
+  const setCheque = (i: number, patch: Partial<ChequeRow>) =>
+    setCheques((cs) => cs.map((c, idx) => (idx === i ? { ...c, ...patch } : c)));
+
+  const onModeChange = (m: string) => {
+    setMode(m);
+    // Seed the first cheque row with the outstanding amount for convenience.
+    if (m === 'Cheque' && cheques.length === 0) setCheques([{ no: '', date: '', amount: amount }]);
+  };
 
   const save = async () => {
     if (amt <= 0) return;
@@ -242,8 +262,9 @@ function SettleModal({ side, rec, onClose, onSaved }: { side: Tab; rec: Customer
     try {
       await http.post('/api/settlements', {
         side, party_id: rec.id, amount: amt, mode,
-        reference: chequeNo.trim() || null,
-        cheque_date: mode === 'Cheque' ? (chequeDate || null) : null,
+        cheques: isCheque
+          ? cheques.filter((c) => c.no.trim() || c.date || Number(c.amount) > 0)
+          : [],
       });
       toast(side === 'receivable' ? 'Receipt recorded' : 'Payment recorded');
       onSaved();
@@ -271,14 +292,37 @@ function SettleModal({ side, rec, onClose, onSaved }: { side: Tab; rec: Customer
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <Field label="Amount (LKR)" req><MoneyInput value={amount} onChange={setAmount} /></Field>
-        <Field label="Payment mode"><Select value={mode} onChange={(e) => setMode(e.target.value)}>{['Bank Transfer', 'Cash', 'Cheque', 'Card', 'Online'].map((m) => <option key={m}>{m}</option>)}</Select></Field>
+        <Field label="Amount (LKR)" req hint={isCheque ? 'Sum of cheque values below.' : undefined}>
+          {isCheque
+            ? <Input className="mono" value={fmt(amt)} readOnly tabIndex={-1} style={{ background: 'var(--surface-2)', color: 'var(--text-muted)' }} />
+            : <MoneyInput value={amount} onChange={setAmount} />}
+        </Field>
+        <Field label="Payment mode"><Select value={mode} onChange={(e) => onModeChange(e.target.value)}>{['Bank Transfer', 'Cash', 'Cheque', 'Card', 'Online'].map((m) => <option key={m}>{m}</option>)}</Select></Field>
       </div>
 
-      {mode === 'Cheque' && (
-        <div className="grid grid-cols-2 gap-4 mt-4">
-          <Field label="Cheque no."><Input className="mono" value={chequeNo} onChange={(e) => setChequeNo(e.target.value)} placeholder="e.g. 6622" /></Field>
-          <Field label="Cheque date"><Input type="date" value={chequeDate} onChange={(e) => setChequeDate(e.target.value)} /></Field>
+      {isCheque && (
+        <div className="mt-4">
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-[13px] font-semibold" style={{ color: 'var(--text-muted)' }}>Cheque details</div>
+            <Button variant="subtle" size="sm" icon={<Plus size={13} />} onClick={addCheque}>Add cheque</Button>
+          </div>
+          {cheques.length === 0 ? (
+            <div className="text-[12px]" style={{ color: 'var(--text-faint)' }}>No cheques. Use “Add cheque” to record cheque no., date and value.</div>
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              {cheques.map((c, i) => (
+                <div key={i} className="flex gap-1.5 items-center">
+                  <Input placeholder="Cheque no." value={c.no} onChange={(e) => setCheque(i, { no: e.target.value })} className="mono" style={{ height: 34, flex: 1, minWidth: 0 }} />
+                  <Input type="date" value={c.date} onChange={(e) => setCheque(i, { date: e.target.value })} style={{ height: 34, width: 150 }} />
+                  <Input placeholder="0.00" inputMode="decimal" value={c.amount} onChange={(e) => setCheque(i, { amount: e.target.value.replace(/[^\d.]/g, '') })} className="mono text-right" style={{ height: 34, width: 110 }} />
+                  <button type="button" className="grid place-items-center w-7 h-7 rounded-md hover:bg-surface-2 flex-shrink-0" onClick={() => delCheque(i)}><X size={14} /></button>
+                </div>
+              ))}
+              <div className="text-[11.5px] mt-0.5" style={{ color: chequeTotal > outstanding ? 'var(--amber)' : 'var(--text-faint)' }}>
+                Total cheques: Rs {fmt(chequeTotal)}{chequeTotal > outstanding ? ` · exceeds outstanding — will record Rs ${fmt(outstanding)}` : ''}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

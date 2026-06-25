@@ -160,6 +160,14 @@ export interface Settlement {
   mode: string;
   reference?: string | null;
   cheque_date?: string | null;
+  cheques?: SettlementCheque[];
+}
+
+export interface SettlementCheque {
+  id?: ID;
+  cheque_no: string | null;
+  cheque_date: string | null;
+  amount: string | number;
 }
 
 export interface AppSettings {
