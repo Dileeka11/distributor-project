@@ -10,18 +10,37 @@ import { Stat } from '@/components/ui/Common';
 import { SalesBarChart, Donut, BarList } from '@/components/Charts';
 import type { DashboardPayload } from '@/types';
 
+type SalesPoint = DashboardPayload['sales_series'][number];
+
 export default function DashboardPage() {
   const navigate = useNavigate();
   const [data, setData] = useState<DashboardPayload | null>(null);
+  const [salesMonth, setSalesMonth] = useState('');
+  const [salesSeries, setSalesSeries] = useState<SalesPoint[]>([]);
 
   useEffect(() => {
-    void http.get<DashboardPayload>('/api/dashboard').then((r) => setData(r.data));
+    void http.get<DashboardPayload>('/api/dashboard').then((r) => {
+      setData(r.data);
+      setSalesMonth(r.data.sales_month);
+      setSalesSeries(r.data.sales_series);
+    });
   }, []);
+
+  const onMonthChange = (m: string) => {
+    if (!m) return;
+    setSalesMonth(m);
+    void http.get<{ series: SalesPoint[] }>('/api/dashboard/sales', { params: { month: m } })
+      .then((r) => setSalesSeries(r.data.series));
+  };
 
   if (!data) return <div style={{ color: 'var(--text-muted)' }}>Loading dashboard…</div>;
 
   const t = data.totals;
-  const maxBal = Math.max(...data.top_receivables.map((c) => Number(c.balance)), 1);
+  const maxBal = Math.max(...data.top_receivables.map((c) => Number(c.credit_limit) + Number(c.balance)), 1);
+  const salesTotal = salesSeries.reduce((s, d) => s + d.cash + d.credit, 0);
+  const monthLabel = salesMonth
+    ? new Date(`${salesMonth}-01T00:00:00`).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+    : '';
 
   return (
     <div className="fade-in">
@@ -42,19 +61,18 @@ export default function DashboardPage() {
         <div className="card">
           <div className="flex items-center justify-between px-5 py-4 border-b border-border">
             <div>
-              <div className="text-[14.5px] font-bold">
-                Sales — {data.sales_series.length
-                  ? `${data.sales_series[0].label} – ${data.sales_series[data.sales_series.length - 1].label}`
-                  : 'last 14 days'}
-              </div>
+              <div className="text-[14.5px] font-bold">Sales — {monthLabel}</div>
               <div className="flex gap-4 mt-1.5">
                 <span className="flex items-center gap-1.5 text-[12px]" style={{ color: 'var(--text-muted)' }}><span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--blue)' }} />Cash</span>
                 <span className="flex items-center gap-1.5 text-[12px]" style={{ color: 'var(--text-muted)' }}><span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--accent)' }} />Credit</span>
               </div>
             </div>
-            <span className="chip mono">Rs {compact(t.cash + t.credit)}</span>
+            <div className="flex items-center gap-2.5">
+              <input type="month" className="input mono" style={{ height: 34, width: 160 }} value={salesMonth} onChange={(e) => onMonthChange(e.target.value)} />
+              <span className="chip mono whitespace-nowrap">Rs {compact(salesTotal)}</span>
+            </div>
           </div>
-          <div className="p-5"><SalesBarChart data={data.sales_series} /></div>
+          <div className="p-5"><SalesBarChart data={salesSeries} /></div>
         </div>
 
         <div className="card">
@@ -110,14 +128,14 @@ export default function DashboardPage() {
             <div className="px-5 py-4 border-b border-border"><div className="text-[14.5px] font-bold">Top receivables</div></div>
             <div className="p-5 flex flex-col gap-4">
               {data.top_receivables.map((c) => {
-                const bal = Number(c.balance), lim = Number(c.credit_limit);
+                const out = Number(c.credit_limit) + Number(c.balance);
                 return (
                   <div key={c.id}>
                     <div className="flex justify-between mb-1.5 text-[13px]">
                       <span className="font-semibold">{c.name}</span>
-                      <span className="money">{bal > 0 ? fmt0(bal) : 'Settled'}</span>
+                      <span className="money">{out > 0 ? fmt0(out) : 'Settled'}</span>
                     </div>
-                    <div className="bar"><span style={{ width: `${(bal / maxBal) * 100}%`, background: bal > lim * 0.8 ? 'var(--red)' : 'var(--accent)' }} /></div>
+                    <div className="bar"><span style={{ width: `${(out / maxBal) * 100}%`, background: 'var(--accent)' }} /></div>
                   </div>
                 );
               })}

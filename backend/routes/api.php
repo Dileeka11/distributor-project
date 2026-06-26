@@ -23,6 +23,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/auth/me', [AuthController::class, 'me'])->name('auth.me');
 
     Route::get('/dashboard', [DashboardController::class, 'index']);
+    Route::get('/dashboard/sales', [DashboardController::class, 'sales']);
 
     Route::get('/categories', [CategoryController::class, 'index']);
     Route::post('/categories', [CategoryController::class, 'store']);
@@ -48,14 +49,20 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/grns', [GrnController::class, 'index']);
     Route::post('/grns', [GrnController::class, 'store']);
     Route::get('/grns/{grn}', [GrnController::class, 'show']);
+    Route::put('/grns/{grn}', [GrnController::class, 'update']);
+    Route::delete('/grns/{grn}', [GrnController::class, 'destroy']);
 
     Route::get('/cheques', [ChequeController::class, 'index']);
     Route::post('/cheques/{cheque}/toggle', [ChequeController::class, 'toggle']);
     Route::get('/grn-cheques', [ChequeController::class, 'grnIndex']);
     Route::post('/grn-cheques/{grnCheque}/toggle', [ChequeController::class, 'grnToggle']);
+    Route::get('/settlement-cheques', [ChequeController::class, 'settlementIndex']);
+    Route::post('/settlement-cheques/{settlementCheque}/toggle', [ChequeController::class, 'settlementToggle']);
 
     Route::get('/settlements', [SettlementController::class, 'index']);
     Route::post('/settlements', [SettlementController::class, 'store']);
+    Route::put('/settlements/{settlement}', [SettlementController::class, 'update']);
+    Route::delete('/settlements/{settlement}', [SettlementController::class, 'destroy']);
     Route::get('/outstanding', [SettlementController::class, 'outstanding']);
 
     Route::get('/settings', [SettingController::class, 'index']);

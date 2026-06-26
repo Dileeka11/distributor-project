@@ -13,7 +13,7 @@ class Customer extends Model
     protected $fillable = [
         'code', 'name', 'contact', 'phone', 'email', 'address', 'city',
         'type', 'cash_discount', 'cheque_discount', 'terms_days',
-        'credit_limit', 'description', 'balance',
+        'credit_limit', 'description', 'balance', 'opening_collected',
     ];
 
     protected $casts = [
@@ -22,6 +22,7 @@ class Customer extends Model
         'terms_days' => 'integer',
         'credit_limit' => 'decimal:2',
         'balance' => 'decimal:2',
+        'opening_collected' => 'decimal:2',
     ];
 
     public function invoices(): HasMany

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, X, Check, Truck, Wallet, PackageOpen, Clock, Box, Download } from 'lucide-react';
+import { Plus, X, Check, Truck, Wallet, PackageOpen, Clock, Box, Download, Edit2, Trash2 } from 'lucide-react';
 import { http, apiErrorMessage } from '@/lib/http';
 import { fmt, fmt0, compact, prettyDate } from '@/lib/format';
-import { toast } from '@/lib/toast';
+import { toast, confirmDelete } from '@/lib/toast';
 import { useSettings } from '@/store/settings';
 import { PageHead } from '@/components/PageHead';
 import { Button } from '@/components/ui/Button';
@@ -26,6 +26,7 @@ export default function GrnsPage() {
   const [q, setQ] = useState('');
   const [tab, setTab] = useState<Tab>('all');
   const [create, setCreate] = useState(false);
+  const [editGrn, setEditGrn] = useState<Grn | null>(null);
   const [view, setView] = useState<Grn | null>(null);
 
   const load = () => http.get('/api/grns', { params: { q, type: tab === 'all' ? undefined : tab } }).then((r) => setRows(r.data.data));
@@ -56,7 +57,7 @@ export default function GrnsPage() {
 
       <div className="card overflow-hidden">
         <table className="tbl">
-          <thead><tr><th>GRN</th><th>Date</th><th>Supplier</th><th>Type</th><th className="num">Total</th><th className="num">Balance</th><th>Status</th></tr></thead>
+          <thead><tr><th>GRN</th><th>Date</th><th>Supplier</th><th>Type</th><th className="num">Total</th><th className="num">Balance</th><th>Status</th><th></th></tr></thead>
           <tbody>
             {rows.map((g) => {
               const st = statusBadge(g.status);
@@ -75,6 +76,16 @@ export default function GrnsPage() {
                   <td className="num money font-bold">{fmt(g.total as number)}</td>
                   <td className="num money" style={{ color: bal > 0 ? 'var(--red)' : 'var(--text-faint)' }}>{bal > 0 ? fmt(bal) : '—'}</td>
                   <td><Badge kind={st.kind} dot>{st.label}</Badge></td>
+                  <td className="num" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex gap-1.5 justify-end">
+                      <Button variant="subtle" size="sm" icon={<Edit2 size={14} />} onClick={() => setEditGrn(g)} />
+                      <Button variant="subtle" size="sm" icon={<Trash2 size={14} />} onClick={async () => {
+                        if (!(await confirmDelete({ title: 'Delete GRN?', html: `Delete <b>${g.no}</b>? Received stock will be removed${g.type === 'credit' ? " and the supplier's payable reversed" : ''}.` }))) return;
+                        try { await http.delete(`/api/grns/${g.id}`); toast('GRN deleted'); void load(); }
+                        catch (e) { toast(apiErrorMessage(e), 'err'); }
+                      }} />
+                    </div>
+                  </td>
                 </tr>
               );
             })}
@@ -83,20 +94,46 @@ export default function GrnsPage() {
         {rows.length === 0 && <Empty icon={<PackageOpen size={40} />} title="No GRNs yet" sub="Record a goods-received note to add stock." />}
       </div>
 
-      {create && <CreateGrn onClose={() => setCreate(false)} onSaved={() => { setCreate(false); void load(); }} />}
+      {(create || editGrn) && (
+        <CreateGrn
+          editGrn={editGrn}
+          onClose={() => { setCreate(false); setEditGrn(null); }}
+          onSaved={() => { setCreate(false); setEditGrn(null); void load(); }}
+        />
+      )}
       {view && <ViewGrn grn={view} onClose={() => setView(null)} />}
     </div>
   );
 }
 
-function CreateGrn({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+function CreateGrn({ editGrn, onClose, onSaved }: { editGrn?: Grn | null; onClose: () => void; onSaved: () => void }) {
   const { settings } = useSettings();
   const taxRate = Number(settings.tax_rate ?? 0);
+  const isEdit = !!editGrn;
   const [type, setType] = useState<'cash' | 'credit'>('credit');
   const [supplierId, setSupplierId] = useState<number | ''>('');
   const [lines, setLines] = useState<DraftLine[]>([blankLine()]);
   const [paid, setPaid] = useState('');
   const [cheques, setCheques] = useState<ChequeRow[]>([]);
+
+  // When editing, load the full GRN (lines + cheques) and pre-fill the form.
+  useEffect(() => {
+    if (!editGrn) return;
+    void http.get(`/api/grns/${editGrn.id}`).then((r) => {
+      const d: Grn = r.data.data;
+      setType(d.type);
+      setSupplierId(Number(d.supplier_id));
+      setLines((d.lines ?? []).map((l) => ({
+        item_id: Number(l.item_id),
+        qty: String(Number(l.qty)),
+        unit_price: String(Number(l.unit_price ?? l.price)),
+        discount: String(Number(l.discount ?? 0)),
+      })));
+      setPaid(d.type === 'credit' ? String(Number(d.paid)) : '');
+      setCheques((d.cheques ?? []).map((c) => ({ no: c.cheque_no ?? '', date: c.cheque_date ? String(c.cheque_date).slice(0, 10) : '', amount: String(Number(c.amount)) })));
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editGrn]);
 
   const addCheque = () => setCheques((cs) => [...cs, { no: '', date: '', amount: '' }]);
   const delCheque = (i: number) => setCheques((cs) => cs.filter((_, idx) => idx !== i));
@@ -139,7 +176,7 @@ function CreateGrn({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
     if (!canSave) return;
     setBusy(true);
     try {
-      await http.post('/api/grns', {
+      const payload = {
         type, supplier_id: supplierId, tax_rate: taxRate,
         paid: type === 'cash' ? totals.total : Number(paid) || 0,
         lines: validLines.map((l) => ({ item_id: l.item_id, qty: Number(l.qty), unit_price: Number(l.unit_price) || 0, discount: Number(l.discount) || 0 })),
@@ -148,8 +185,10 @@ function CreateGrn({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
               .filter((c) => c.no.trim() || c.date || Number(c.amount) > 0)
               .map((c) => ({ no: c.no.trim() || null, date: c.date || null, amount: Number(c.amount) || 0 }))
           : [],
-      });
-      toast('GRN created');
+      };
+      if (isEdit) await http.put(`/api/grns/${editGrn!.id}`, payload);
+      else await http.post('/api/grns', payload);
+      toast(isEdit ? 'GRN updated' : 'GRN created');
       onSaved();
     } catch (e) { toast(apiErrorMessage(e), 'err'); }
     finally { setBusy(false); }
@@ -158,7 +197,7 @@ function CreateGrn({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
   return (
     <Modal
       xl
-      title="New Goods Received Note"
+      title={isEdit ? `Edit GRN ${editGrn!.no}` : 'New Goods Received Note'}
       onClose={onClose}
       footer={
         <>
@@ -167,7 +206,7 @@ function CreateGrn({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
             <span className="text-[20px] font-extrabold mono">Rs {fmt(totals.total)}</span>
           </div>
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button variant="primary" disabled={!canSave} onClick={save}>Receive {type === 'cash' ? 'Cash' : 'Credit'} GRN</Button>
+          <Button variant="primary" disabled={!canSave} onClick={save}>{isEdit ? 'Save changes' : `Receive ${type === 'cash' ? 'Cash' : 'Credit'} GRN`}</Button>
         </>
       }
     >

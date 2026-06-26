@@ -38,6 +38,7 @@ export interface Customer extends Party {
   credit_limit: string | number;
   description: string | null;
   balance: string | number;
+  opening_collected?: string | number;
   paid_total?: string | number;
 }
 
@@ -127,6 +128,8 @@ export interface GrnLine {
   item_id: ID;
   name: string;
   qty: string | number;
+  unit_price?: string | number;
+  discount?: string | number;
   price: string | number;
   total: string | number;
 }
@@ -145,6 +148,7 @@ export interface Grn {
   paid: string | number;
   status: TxnStatus;
   lines?: GrnLine[];
+  cheques?: Cheque[];
 }
 
 export interface Settlement {
@@ -161,6 +165,7 @@ export interface Settlement {
   reference?: string | null;
   cheque_date?: string | null;
   cheques?: SettlementCheque[];
+  passed?: boolean;
 }
 
 export interface SettlementCheque {
@@ -168,6 +173,22 @@ export interface SettlementCheque {
   cheque_no: string | null;
   cheque_date: string | null;
   amount: string | number;
+  cleared_at?: string | null;
+}
+
+export interface SettlementChequeRecord {
+  id: ID;
+  settlement_id: ID;
+  settlement_code: string;
+  side: 'receivable' | 'payable';
+  customer_id?: ID | null;
+  supplier_id?: ID | null;
+  party_name: string | null;
+  cheque_no: string | null;
+  cheque_date: string | null;
+  amount: string | number;
+  settlement_amount: string | number;
+  cleared: boolean;
 }
 
 export interface AppSettings {
@@ -197,5 +218,6 @@ export interface DashboardPayload {
   recent_invoices: Invoice[];
   top_receivables: Pick<Customer, 'id' | 'code' | 'name' | 'credit_limit' | 'balance'>[];
   sales_series: { date: string; label: string; cash: number; credit: number; }[];
+  sales_month: string;
   inventory_by_category: { label: string; value: number; }[];
 }

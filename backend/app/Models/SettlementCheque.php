@@ -7,11 +7,13 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class SettlementCheque extends Model
 {
-    protected $fillable = ['settlement_id', 'cheque_no', 'cheque_date', 'amount'];
+    protected $fillable = ['settlement_id', 'cheque_no', 'cheque_date', 'amount', 'cleared_at', 'applied'];
 
     protected $casts = [
         'cheque_date' => 'date',
         'amount' => 'decimal:2',
+        'cleared_at' => 'datetime',
+        'applied' => 'array',
     ];
 
     public function settlement(): BelongsTo

@@ -7,7 +7,9 @@ use App\Models\Grn;
 use App\Models\GrnCheque;
 use App\Models\Invoice;
 use App\Models\InvoiceCheque;
+use App\Models\SettlementCheque;
 use App\Models\Supplier;
+use App\Services\SettlementService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 
@@ -119,5 +121,79 @@ class ChequeController extends Controller
         });
 
         return response()->json(['data' => $grnCheque->fresh()]);
+    }
+
+    /**
+     * Cheques captured while settling an outstanding (the Collect / Pay flow).
+     * Referenced by the settlement receipt code (e.g. RCP-001 / PAY-001).
+     */
+    public function settlementIndex(): JsonResponse
+    {
+        $rows = SettlementCheque::query()
+            ->with([
+                'settlement:id,code,side,customer_id,supplier_id,amount',
+                'settlement.customer:id,name',
+                'settlement.supplier:id,name',
+            ])
+            ->orderBy('cleared_at')
+            ->orderByDesc('id')
+            ->get()
+            ->map(fn (SettlementCheque $c) => [
+                'id' => $c->id,
+                'settlement_id' => $c->settlement_id,
+                'settlement_code' => $c->settlement?->code,
+                'side' => $c->settlement?->side,
+                'customer_id' => $c->settlement?->customer_id,
+                'supplier_id' => $c->settlement?->supplier_id,
+                'party_name' => $c->settlement?->customer?->name ?? $c->settlement?->supplier?->name,
+                'cheque_no' => $c->cheque_no,
+                'cheque_date' => optional($c->cheque_date)->toDateString(),
+                'amount' => (float) $c->amount,
+                'settlement_amount' => (float) ($c->settlement?->amount ?? 0),
+                'cleared' => (bool) $c->cleared_at,
+            ]);
+
+        return response()->json(['data' => $rows]);
+    }
+
+    /**
+     * Tick / untick a settlement cheque as "passed". A cheque receipt/payment
+     * posts nothing until it clears: passing it applies the value to the party's
+     * outstanding (and invoice/GRN paid); unticking reverses it exactly.
+     */
+    public function settlementToggle(SettlementCheque $settlementCheque, SettlementService $posting): JsonResponse
+    {
+        DB::transaction(function () use ($settlementCheque, $posting) {
+            $settlement = $settlementCheque->settlement()->lockForUpdate()->firstOrFail();
+
+            if ($settlementCheque->cleared_at) {
+                // Reverse the posting recorded when it was passed.
+                $applied = $settlementCheque->applied ?? [];
+                if ($settlement->side === 'receivable' && $settlement->customer_id) {
+                    $customer = Customer::query()->whereKey($settlement->customer_id)->lockForUpdate()->firstOrFail();
+                    $posting->reverseReceivable($customer, $applied);
+                } elseif ($settlement->supplier_id) {
+                    $supplier = Supplier::query()->whereKey($settlement->supplier_id)->lockForUpdate()->firstOrFail();
+                    $posting->reversePayable($supplier, $applied);
+                }
+                $settlementCheque->applied = null;
+                $settlementCheque->cleared_at = null;
+            } else {
+                // Post the cheque value now that it has cleared.
+                $amount = (float) $settlementCheque->amount;
+                if ($settlement->side === 'receivable' && $settlement->customer_id) {
+                    $customer = Customer::query()->whereKey($settlement->customer_id)->lockForUpdate()->firstOrFail();
+                    $settlementCheque->applied = $posting->applyReceivable($customer, $amount);
+                } elseif ($settlement->supplier_id) {
+                    $supplier = Supplier::query()->whereKey($settlement->supplier_id)->lockForUpdate()->firstOrFail();
+                    $settlementCheque->applied = $posting->applyPayable($supplier, $amount);
+                }
+                $settlementCheque->cleared_at = now();
+            }
+
+            $settlementCheque->save();
+        });
+
+        return response()->json(['data' => $settlementCheque->fresh()]);
     }
 }

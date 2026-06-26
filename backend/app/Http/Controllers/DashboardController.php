@@ -8,6 +8,7 @@ use App\Models\Invoice;
 use App\Models\Item;
 use App\Models\Supplier;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -18,7 +19,9 @@ class DashboardController extends Controller
         $totalSales = (float) Invoice::query()->sum('total');
         $cashTotal = (float) Invoice::query()->where('type', 'cash')->sum('total');
         $creditTotal = (float) Invoice::query()->where('type', 'credit')->sum('total');
-        $receivable = (float) Customer::query()->sum('balance');
+        // Outstanding from customers = opening (credit_limit) + invoice balance,
+        // matching the Outstanding page.
+        $receivable = (float) Customer::query()->sum(DB::raw('credit_limit + balance'));
         $payable = (float) Supplier::query()->sum('payable');
         $lowStock = Item::query()->where('stock', '<', 200)
             ->orderBy('stock')
@@ -30,34 +33,13 @@ class DashboardController extends Controller
             ->limit(6)->get();
 
         $topReceivables = Customer::query()
-            ->where('balance', '>', 0)
-            ->orderByDesc('balance')
+            ->whereRaw('credit_limit + balance > 0')
+            ->orderByRaw('(credit_limit + balance) desc')
             ->limit(5)->get(['id', 'code', 'name', 'credit_limit', 'balance']);
 
-        // 14-day sales by type — anchored to the latest invoice so activity always shows,
-        // even when the most recent data is older than the current date.
-        $latestDate = Invoice::query()->max('date');
-        $anchor = $latestDate ? Carbon::parse($latestDate) : Carbon::today();
-        $from = $anchor->copy()->subDays(13);
-        $daily = Invoice::query()
-            ->whereBetween('date', [$from, $anchor])
-            ->selectRaw('date, type, SUM(total) as total')
-            ->groupBy('date', 'type')
-            ->get()
-            ->groupBy(fn ($r) => $r->date->toDateString());
-
-        $series = [];
-        for ($i = 0; $i < 14; $i++) {
-            $d = $from->copy()->addDays($i);
-            $key = $d->toDateString();
-            $bucket = $daily->get($key, collect());
-            $series[] = [
-                'date' => $key,
-                'label' => $d->format('M d'),
-                'cash' => (float) (optional($bucket->firstWhere('type', 'cash'))->total ?? 0),
-                'credit' => (float) (optional($bucket->firstWhere('type', 'credit'))->total ?? 0),
-            ];
-        }
+        // Daily sales by type for the current month (the picker fetches other months).
+        $salesMonth = Carbon::today()->startOfMonth();
+        $series = $this->salesSeries($salesMonth);
 
         // Inventory value by category
         $catValue = Item::query()
@@ -80,7 +62,63 @@ class DashboardController extends Controller
             'recent_invoices' => $recent,
             'top_receivables' => $topReceivables,
             'sales_series' => $series,
+            'sales_month' => $salesMonth->format('Y-m'),
             'inventory_by_category' => $catValue,
         ]);
+    }
+
+    /**
+     * Daily cash/credit sales for a single month (YYYY-MM), for the dashboard
+     * month picker. Defaults to the current month.
+     */
+    public function sales(Request $request): JsonResponse
+    {
+        $month = (string) $request->input('month', '');
+        try {
+            $start = Carbon::createFromFormat('Y-m', $month)->startOfMonth();
+        } catch (\Throwable) {
+            $start = Carbon::today()->startOfMonth();
+        }
+
+        $series = $this->salesSeries($start);
+        $total = array_sum(array_map(fn ($r) => $r['cash'] + $r['credit'], $series));
+
+        return response()->json([
+            'month' => $start->format('Y-m'),
+            'series' => $series,
+            'total' => $total,
+        ]);
+    }
+
+    /**
+     * Build a per-day cash/credit series spanning the given month.
+     */
+    private function salesSeries(Carbon $start): array
+    {
+        $start = $start->copy()->startOfMonth();
+        $end = $start->copy()->endOfMonth();
+
+        $daily = Invoice::query()
+            ->whereBetween('date', [$start->toDateString(), $end->toDateString()])
+            ->selectRaw('date, type, SUM(total) as total')
+            ->groupBy('date', 'type')
+            ->get()
+            ->groupBy(fn ($r) => $r->date->toDateString());
+
+        $series = [];
+        $days = (int) $start->daysInMonth;
+        for ($i = 0; $i < $days; $i++) {
+            $d = $start->copy()->addDays($i);
+            $key = $d->toDateString();
+            $bucket = $daily->get($key, collect());
+            $series[] = [
+                'date' => $key,
+                'label' => $d->format('M d'),
+                'cash' => (float) (optional($bucket->firstWhere('type', 'cash'))->total ?? 0),
+                'credit' => (float) (optional($bucket->firstWhere('type', 'credit'))->total ?? 0),
+            ];
+        }
+
+        return $series;
     }
 }
