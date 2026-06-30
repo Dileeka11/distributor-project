@@ -64,6 +64,15 @@ class GrnController extends Controller
 
     public function update(StoreGrnRequest $request, Grn $grn): JsonResponse
     {
+        // Editing re-applies the GRN from scratch (paid resets to the advance),
+        // which would wipe any payments / cleared cheques recorded against it.
+        // Block it once money has been collected beyond the up-front advance.
+        abort_if(
+            round((float) $grn->paid - (float) $grn->advance, 2) > 0,
+            422,
+            'This GRN has recorded payments or cleared cheques. Reverse them (un-clear its cheques and delete its payments) before editing.'
+        );
+
         $data = $request->validated();
         $taxRate = (float) ($data['tax_rate'] ?? 0);
 
@@ -138,6 +147,8 @@ class GrnController extends Controller
             'tax_amount' => $taxAmount,
             'total' => $total,
             'paid' => $paid,
+            // Up-front amount from the form; unaffected by later cheque clearing / payments.
+            'advance' => $paid,
             'status' => $status,
         ]);
         $grn->save();

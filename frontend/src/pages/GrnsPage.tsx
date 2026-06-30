@@ -129,7 +129,7 @@ function CreateGrn({ editGrn, onClose, onSaved }: { editGrn?: Grn | null; onClos
         unit_price: String(Number(l.unit_price ?? l.price)),
         discount: String(Number(l.discount ?? 0)),
       })));
-      setPaid(d.type === 'credit' ? String(Number(d.paid)) : '');
+      setPaid(d.type === 'credit' ? String(Number(d.advance ?? d.paid)) : '');
       setCheques((d.cheques ?? []).map((c) => ({ no: c.cheque_no ?? '', date: c.cheque_date ? String(c.cheque_date).slice(0, 10) : '', amount: String(Number(c.amount)) })));
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps

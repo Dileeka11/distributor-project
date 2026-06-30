@@ -83,6 +83,7 @@ export interface Invoice {
   tax_amount: string | number;
   total: string | number;
   paid: string | number;
+  advance?: string | number; // up-front amount paid now (stable; excludes later collections)
   status: TxnStatus;
   lines?: InvoiceLine[];
   cheques?: Cheque[];
@@ -146,6 +147,7 @@ export interface Grn {
   tax_amount: string | number;
   total: string | number;
   paid: string | number;
+  advance?: string | number; // up-front amount paid now (stable; excludes later payments)
   status: TxnStatus;
   lines?: GrnLine[];
   cheques?: Cheque[];

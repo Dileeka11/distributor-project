@@ -11,6 +11,7 @@ import CustomersPage from '@/pages/CustomersPage';
 import InvoicesPage from '@/pages/InvoicesPage';
 import GrnsPage from '@/pages/GrnsPage';
 import OutstandingPage from '@/pages/OutstandingPage';
+import ReportsPage from '@/pages/ReportsPage';
 import SettingsPage from '@/pages/SettingsPage';
 
 export default function App() {
@@ -46,6 +47,7 @@ export default function App() {
         <Route path="invoices" element={<InvoicesPage />} />
         <Route path="grns" element={<GrnsPage />} />
         <Route path="outstanding" element={<OutstandingPage />} />
+        <Route path="reports" element={<ReportsPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

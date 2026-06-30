@@ -64,6 +64,15 @@ class InvoiceController extends Controller
 
     public function update(StoreInvoiceRequest $request, Invoice $invoice): JsonResponse
     {
+        // Editing re-applies the invoice from scratch (paid resets to the advance),
+        // which would wipe any collections / cleared cheques recorded against it.
+        // Block it once money has been collected beyond the up-front advance.
+        abort_if(
+            round((float) $invoice->paid - (float) $invoice->advance, 2) > 0,
+            422,
+            'This invoice has collections or cleared cheques recorded. Reverse them (un-clear its cheques and delete its receipts) before editing.'
+        );
+
         $data = $request->validated();
         $taxRate = (float) ($data['tax_rate'] ?? 0);
 
@@ -158,6 +167,9 @@ class InvoiceController extends Controller
             'tax_amount' => $taxAmount,
             'total' => $total,
             'paid' => $paid,
+            // The up-front amount entered on the form. Stays put while cheques
+            // clear / settlements post (those only move `paid`).
+            'advance' => $paid,
             'status' => $status,
         ]);
         $invoice->save();

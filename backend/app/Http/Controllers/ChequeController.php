@@ -52,11 +52,9 @@ class ChequeController extends Controller
 
             if ($cheque->cleared_at) {
                 $invoice->paid = round((float) $invoice->paid - $amount, 2);
-                Customer::query()->whereKey($invoice->customer_id)->increment('balance', $amount);
                 $cheque->cleared_at = null;
             } else {
                 $invoice->paid = round((float) $invoice->paid + $amount, 2);
-                Customer::query()->whereKey($invoice->customer_id)->decrement('balance', $amount);
                 $cheque->cleared_at = now();
             }
 
@@ -64,6 +62,11 @@ class ChequeController extends Controller
             $invoice->status = $balance <= 0 ? 'paid' : ((float) $invoice->paid > 0 ? 'partial' : 'unpaid');
             $invoice->save();
             $cheque->save();
+
+            // Recompute the customer's running outstanding from the invoices instead
+            // of nudging it by the cheque value — over/under-applied cheques then
+            // can't drift it (an overpaid invoice contributes 0, never negative).
+            $this->reconcileCustomerBalance((int) $invoice->customer_id);
         });
 
         return response()->json(['data' => $cheque->fresh()]);
@@ -106,11 +109,9 @@ class ChequeController extends Controller
 
             if ($grnCheque->cleared_at) {
                 $grn->paid = round((float) $grn->paid - $amount, 2);
-                Supplier::query()->whereKey($grn->supplier_id)->increment('payable', $amount);
                 $grnCheque->cleared_at = null;
             } else {
                 $grn->paid = round((float) $grn->paid + $amount, 2);
-                Supplier::query()->whereKey($grn->supplier_id)->decrement('payable', $amount);
                 $grnCheque->cleared_at = now();
             }
 
@@ -118,6 +119,9 @@ class ChequeController extends Controller
             $grn->status = $balance <= 0 ? 'paid' : ((float) $grn->paid > 0 ? 'partial' : 'unpaid');
             $grn->save();
             $grnCheque->save();
+
+            // Recompute the supplier's payable from the GRNs (same anti-drift rule).
+            $this->reconcileSupplierPayable((int) $grn->supplier_id);
         });
 
         return response()->json(['data' => $grnCheque->fresh()]);
@@ -192,8 +196,41 @@ class ChequeController extends Controller
             }
 
             $settlementCheque->save();
+
+            if ($settlement->side === 'receivable' && $settlement->customer_id) {
+                $this->reconcileCustomerBalance((int) $settlement->customer_id);
+            } elseif ($settlement->supplier_id) {
+                $this->reconcileSupplierPayable((int) $settlement->supplier_id);
+            }
         });
 
         return response()->json(['data' => $settlementCheque->fresh()]);
+    }
+
+    /**
+     * A customer's running balance is the sum of their unpaid credit invoices
+     * (opening dues live separately in credit_limit). Recomputing it from the
+     * invoices keeps it exact; GREATEST(.,0) means an overpaid invoice contributes
+     * 0 so the outstanding can never be pushed below the opening.
+     */
+    private function reconcileCustomerBalance(int $customerId): void
+    {
+        $unpaid = (float) Invoice::query()
+            ->where('customer_id', $customerId)
+            ->where('type', 'credit')
+            ->selectRaw('COALESCE(SUM(GREATEST(total - paid, 0)), 0) AS v')
+            ->value('v');
+        Customer::query()->whereKey($customerId)->update(['balance' => round($unpaid, 2)]);
+    }
+
+    /** Supplier payable is the sum of unpaid credit GRNs (same anti-drift rule). */
+    private function reconcileSupplierPayable(int $supplierId): void
+    {
+        $unpaid = (float) Grn::query()
+            ->where('supplier_id', $supplierId)
+            ->where('type', 'credit')
+            ->selectRaw('COALESCE(SUM(GREATEST(total - paid, 0)), 0) AS v')
+            ->value('v');
+        Supplier::query()->whereKey($supplierId)->update(['payable' => round($unpaid, 2)]);
     }
 }

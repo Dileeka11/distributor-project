@@ -1,4 +1,4 @@
-import { LayoutDashboard, Package, Truck, Users, ReceiptText, PackageOpen, Scale, Settings as SettingsIcon, LogOut } from 'lucide-react';
+import { LayoutDashboard, Package, Truck, Users, ReceiptText, PackageOpen, Scale, FileBarChart2, Settings as SettingsIcon, LogOut } from 'lucide-react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '@/store/auth';
 import { useSettings } from '@/store/settings';
@@ -12,6 +12,7 @@ const NAV: NavEntry[] = [
   { to: '/invoices', label: 'Invoices', icon: ReceiptText, group: 'Transactions' },
   { to: '/grns', label: 'Purchases (GRN)', icon: PackageOpen, group: 'Transactions' },
   { to: '/outstanding', label: 'Outstanding', icon: Scale, group: 'Transactions' },
+  { to: '/reports', label: 'Reports', icon: FileBarChart2, group: 'Transactions' },
   { to: '/settings', label: 'Settings', icon: SettingsIcon, group: 'System' },
 ];
 

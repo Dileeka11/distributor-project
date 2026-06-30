@@ -131,7 +131,7 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
       setTaxRate(Number(d.tax_rate));
       setLines((d.lines ?? []).map((l) => ({ item_id: Number(l.item_id), batch_id: l.batch_id ? Number(l.batch_id) : '', qty: String(Number(l.qty)), price: String(Number(l.price)) })));
       (d.lines ?? []).forEach((l) => loadBatches(Number(l.item_id)));
-      setPaid(d.type === 'credit' ? String(Number(d.paid)) : '');
+      setPaid(d.type === 'credit' ? String(Number(d.advance ?? d.paid)) : '');
       setCheques((d.cheques ?? []).map((c) => ({ no: c.cheque_no ?? '', date: c.cheque_date ? String(c.cheque_date).slice(0, 10) : '', amount: String(Number(c.amount)) })));
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
