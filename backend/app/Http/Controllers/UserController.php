@@ -77,8 +77,8 @@ class UserController extends Controller
     {
         return $request->validate([
             'name' => ['required', 'string', 'max:120'],
-            'username' => ['required', 'string', 'max:60', Rule::unique('users', 'username')->ignore($user?->id)],
-            'email' => ['nullable', 'email', 'max:160', Rule::unique('users', 'email')->ignore($user?->id)],
+            'username' => ['required', 'string', 'max:60', Rule::unique('users', 'username')->ignore(optional($user)->id)],
+            'email' => ['nullable', 'email', 'max:160', Rule::unique('users', 'email')->ignore(optional($user)->id)],
             'password' => [$user ? 'nullable' : 'required', 'string', 'min:4', 'max:100'],
             'is_admin' => ['boolean'],
             'permissions' => ['array'],

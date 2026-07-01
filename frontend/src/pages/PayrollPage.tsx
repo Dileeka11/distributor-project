@@ -7,7 +7,7 @@ import { PageHead } from '@/components/PageHead';
 import { Button } from '@/components/ui/Button';
 import { Empty } from '@/components/ui/Common';
 import { Modal } from '@/components/ui/Modal';
-import { Field, Input, Select, MoneyInput } from '@/components/ui/Field';
+import { Field, Select, MoneyInput } from '@/components/ui/Field';
 import { useSettings } from '@/store/settings';
 import type { Employee, Payroll } from '@/types';
 

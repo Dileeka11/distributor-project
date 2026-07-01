@@ -25,14 +25,14 @@ class ChequeController extends Controller
             ->map(fn (InvoiceCheque $c) => [
                 'id' => $c->id,
                 'invoice_id' => $c->invoice_id,
-                'invoice_no' => $c->invoice?->no,
-                'customer_id' => $c->invoice?->customer_id,
-                'customer_name' => $c->invoice?->customer?->name,
+                'invoice_no' => optional($c->invoice)->no,
+                'customer_id' => optional($c->invoice)->customer_id,
+                'customer_name' => optional(optional($c->invoice)->customer)->name,
                 'cheque_no' => $c->cheque_no,
                 'cheque_date' => optional($c->cheque_date)->toDateString(),
                 'amount' => (float) $c->amount,
-                'invoice_total' => (float) ($c->invoice?->total ?? 0),
-                'invoice_paid' => (float) ($c->invoice?->paid ?? 0),
+                'invoice_total' => (float) (optional($c->invoice)->total ?? 0),
+                'invoice_paid' => (float) (optional($c->invoice)->paid ?? 0),
                 'cleared' => (bool) $c->cleared_at,
             ]);
 
@@ -82,14 +82,14 @@ class ChequeController extends Controller
             ->map(fn (GrnCheque $c) => [
                 'id' => $c->id,
                 'grn_id' => $c->grn_id,
-                'grn_no' => $c->grn?->no,
-                'supplier_id' => $c->grn?->supplier_id,
-                'supplier_name' => $c->grn?->supplier?->name,
+                'grn_no' => optional($c->grn)->no,
+                'supplier_id' => optional($c->grn)->supplier_id,
+                'supplier_name' => optional(optional($c->grn)->supplier)->name,
                 'cheque_no' => $c->cheque_no,
                 'cheque_date' => optional($c->cheque_date)->toDateString(),
                 'amount' => (float) $c->amount,
-                'grn_total' => (float) ($c->grn?->total ?? 0),
-                'grn_paid' => (float) ($c->grn?->paid ?? 0),
+                'grn_total' => (float) (optional($c->grn)->total ?? 0),
+                'grn_paid' => (float) (optional($c->grn)->paid ?? 0),
                 'cleared' => (bool) $c->cleared_at,
             ]);
 
@@ -145,15 +145,15 @@ class ChequeController extends Controller
             ->map(fn (SettlementCheque $c) => [
                 'id' => $c->id,
                 'settlement_id' => $c->settlement_id,
-                'settlement_code' => $c->settlement?->code,
-                'side' => $c->settlement?->side,
-                'customer_id' => $c->settlement?->customer_id,
-                'supplier_id' => $c->settlement?->supplier_id,
-                'party_name' => $c->settlement?->customer?->name ?? $c->settlement?->supplier?->name,
+                'settlement_code' => optional($c->settlement)->code,
+                'side' => optional($c->settlement)->side,
+                'customer_id' => optional($c->settlement)->customer_id,
+                'supplier_id' => optional($c->settlement)->supplier_id,
+                'party_name' => optional(optional($c->settlement)->customer)->name ?? optional(optional($c->settlement)->supplier)->name,
                 'cheque_no' => $c->cheque_no,
                 'cheque_date' => optional($c->cheque_date)->toDateString(),
                 'amount' => (float) $c->amount,
-                'settlement_amount' => (float) ($c->settlement?->amount ?? 0),
+                'settlement_amount' => (float) (optional($c->settlement)->amount ?? 0),
                 'cleared' => (bool) $c->cleared_at,
             ]);
 
