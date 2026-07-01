@@ -76,7 +76,7 @@ class DashboardController extends Controller
         $month = (string) $request->input('month', '');
         try {
             $start = Carbon::createFromFormat('Y-m', $month)->startOfMonth();
-        } catch (\Throwable) {
+        } catch (\Throwable $e) {
             $start = Carbon::today()->startOfMonth();
         }
 
