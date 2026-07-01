@@ -6,7 +6,8 @@ import { toast, confirmDelete } from '@/lib/toast';
 import { PageHead } from '@/components/PageHead';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
-import { SearchBar, Empty, Avatar } from '@/components/ui/Common';
+import { Empty, Avatar } from '@/components/ui/Common';
+import { SearchSelect } from '@/components/ui/SearchSelect';
 import { Modal } from '@/components/ui/Modal';
 import { Field, Input, Select, Textarea, MoneyInput } from '@/components/ui/Field';
 import type { Customer, CustomerType } from '@/types';
@@ -26,16 +27,17 @@ const nextCustomerCode = (rows: Customer[]): string => {
 export default function CustomersPage() {
   const [rows, setRows] = useState<Customer[]>([]);
   const [types, setTypes] = useState<CustomerType[]>([]);
-  const [q, setQ] = useState('');
+  const [customerId, setCustomerId] = useState<number | ''>('');
   const [typeFilter, setTypeFilter] = useState<string>('All');
   const [editing, setEditing] = useState<Customer | 'new' | null>(null);
 
-  const load = () => http.get('/api/customers', { params: { q, type: typeFilter === 'All' ? undefined : typeFilter } }).then((r) => setRows(r.data.data));
+  const load = () => http.get('/api/customers', { params: { type: typeFilter === 'All' ? undefined : typeFilter } }).then((r) => setRows(r.data.data));
   const loadTypes = () => http.get('/api/customer-types').then((r) => setTypes(r.data.data));
 
   useEffect(() => { void loadTypes(); }, []);
-  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [q, typeFilter]);
+  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [typeFilter]);
 
+  const filtered = customerId === '' ? rows : rows.filter((c) => Number(c.id) === customerId);
   const totalOutstanding = rows.reduce((s, c) => s + Number(c.credit_limit) + Number(c.balance), 0);
 
   return (
@@ -46,18 +48,18 @@ export default function CustomersPage() {
         actions={<Button variant="primary" icon={<Plus size={16} />} onClick={() => setEditing('new')}>Add Customer</Button>}
       />
       <div className="flex items-center gap-2.5 mb-4 flex-wrap">
-        <SearchBar value={q} onChange={setQ} placeholder="Search customers…" />
-        <Select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={{ width: 200, height: 40 }}>
+        <Select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setCustomerId(''); }} style={{ width: 200, height: 40 }}>
           <option value="All">All types</option>
           {types.map((t) => <option key={t.id} value={t.name}>{t.name}</option>)}
         </Select>
+        <SearchSelect items={rows} value={customerId} onChange={setCustomerId} allLabel="All customers" placeholder="Search name, code or mobile…" width={300} subtitle={(c) => `${c.code}${c.phone ? ` · ${c.phone}` : ''}`} />
       </div>
 
       <div className="card overflow-hidden">
         <table className="tbl">
           <thead><tr><th>Code</th><th>Customer</th><th>Contact</th><th>City</th><th>Type</th><th>Paid / Outstanding</th><th className="num">Outstanding</th><th></th></tr></thead>
           <tbody>
-            {rows.map((c) => {
+            {filtered.map((c) => {
               const bal = Number(c.balance), lim = Number(c.credit_limit);
               const paid = Number(c.paid_total ?? 0);
               const outstanding = lim + bal;
@@ -107,7 +109,7 @@ export default function CustomersPage() {
             })}
           </tbody>
         </table>
-        {rows.length === 0 && <Empty icon={<Users size={40} />} title="No customers found" />}
+        {filtered.length === 0 && <Empty icon={<Users size={40} />} title="No customers found" />}
       </div>
 
       {editing && (

@@ -209,7 +209,65 @@ export interface AppSettings {
   address?: string;
 }
 
-export interface User { id: ID; name: string; email: string; }
+export interface User {
+  id: ID;
+  name: string;
+  username?: string | null;
+  email?: string | null;
+  is_admin?: boolean;
+  permissions?: string[];
+}
+
+export interface JobRole {
+  id: ID;
+  name: string;
+}
+
+export interface Employee {
+  id: ID;
+  code: string;
+  name: string;
+  role: string | null;
+  phone: string | null;
+  email: string | null;
+  basic_salary: string | number;
+  hourly_rate: string | number;
+  work_hours: string | number;   // standard hours per day; OT starts beyond this
+  ot_rate: string | number;      // overtime rate (LKR / hour)
+  join_date: string | null;
+  active: boolean;
+}
+
+export interface Attendance {
+  id: ID;
+  employee_id: ID;
+  employee?: Employee;
+  date: string;
+  clock_in: string | null;
+  clock_out: string | null;
+  total_hours: string | number;
+  status: string; // present | absent | leave | half-day
+}
+
+export interface Payroll {
+  id: ID;
+  code: string;
+  employee_id: ID;
+  employee?: Employee;
+  month: number;
+  year: number;
+  days_worked: number;
+  total_hours: string | number;
+  ot_hours: string | number;
+  basic_salary: string | number;
+  hours_pay: string | number;
+  ot_pay: string | number;
+  bonus: string | number;
+  gross_pay: string | number;
+  deductions: string | number;
+  net_pay: string | number;
+  generated_at: string | null;
+}
 
 export interface DashboardPayload {
   totals: {

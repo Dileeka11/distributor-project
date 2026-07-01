@@ -1,17 +1,22 @@
 <?php
 
+use App\Http\Controllers\AttendanceController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\ChequeController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\CustomerTypeController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\GrnController;
 use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\ItemController;
+use App\Http\Controllers\JobRoleController;
+use App\Http\Controllers\PayrollController;
 use App\Http\Controllers\SettingController;
 use App\Http\Controllers\SettlementController;
 use App\Http\Controllers\SupplierController;
+use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/auth/login', [AuthController::class, 'login'])
@@ -64,6 +69,27 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/settlements/{settlement}', [SettlementController::class, 'update']);
     Route::delete('/settlements/{settlement}', [SettlementController::class, 'destroy']);
     Route::get('/outstanding', [SettlementController::class, 'outstanding']);
+
+    Route::get('/job-roles', [JobRoleController::class, 'index']);
+    Route::post('/job-roles', [JobRoleController::class, 'store']);
+    Route::put('/job-roles/{jobRole}', [JobRoleController::class, 'update']);
+    Route::delete('/job-roles/{jobRole}', [JobRoleController::class, 'destroy']);
+
+    Route::apiResource('employees', EmployeeController::class)->only(['index', 'store', 'update', 'destroy']);
+
+    Route::get('/attendance', [AttendanceController::class, 'index']);
+    Route::post('/attendance', [AttendanceController::class, 'store']);
+    Route::post('/attendance/clock', [AttendanceController::class, 'clock']);
+    Route::delete('/attendance/{attendance}', [AttendanceController::class, 'destroy']);
+
+    Route::get('/payrolls', [PayrollController::class, 'index']);
+    Route::post('/payrolls/generate', [PayrollController::class, 'generate']);
+    Route::delete('/payrolls/{payroll}', [PayrollController::class, 'destroy']);
+
+    Route::get('/users', [UserController::class, 'index']);
+    Route::post('/users', [UserController::class, 'store']);
+    Route::put('/users/{user}', [UserController::class, 'update']);
+    Route::delete('/users/{user}', [UserController::class, 'destroy']);
 
     Route::get('/settings', [SettingController::class, 'index']);
     Route::put('/settings', [SettingController::class, 'update']);

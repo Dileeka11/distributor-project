@@ -1,12 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Plus, Edit2, Trash2, Box } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Plus, Edit2, Trash2, Box, ChevronDown, Search } from 'lucide-react';
 import { http, apiErrorMessage } from '@/lib/http';
 import { fmt, fmt0 } from '@/lib/format';
 import { toast, confirmDelete } from '@/lib/toast';
 import { PageHead } from '@/components/PageHead';
 import { Button } from '@/components/ui/Button';
 import { Badge, stockBadge } from '@/components/ui/Badge';
-import { SearchBar, Empty } from '@/components/ui/Common';
+import { Empty } from '@/components/ui/Common';
 import { Modal } from '@/components/ui/Modal';
 import { Field, Input, Select, MoneyInput } from '@/components/ui/Field';
 import type { Category, Item } from '@/types';
@@ -21,17 +21,18 @@ const blankForm = (): ItemForm => ({ code: '', name: '', category_id: '', price:
 export default function ItemsPage() {
   const [items, setItems] = useState<Item[]>([]);
   const [cats, setCats] = useState<Category[]>([]);
-  const [q, setQ] = useState('');
   const [catFilter, setCatFilter] = useState<'All' | number>('All');
+  const [itemId, setItemId] = useState<number | ''>('');
   const [editing, setEditing] = useState<Item | 'new' | null>(null);
 
-  const load = () => http.get('/api/items', { params: { q, category_id: catFilter === 'All' ? undefined : catFilter } }).then((r) => setItems(r.data.data));
+  const load = () => http.get('/api/items', { params: { category_id: catFilter === 'All' ? undefined : catFilter } }).then((r) => setItems(r.data.data));
   const loadCats = () => http.get('/api/categories').then((r) => setCats(r.data.data));
 
   useEffect(() => { void loadCats(); }, []);
-  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [q, catFilter]);
+  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [catFilter]);
 
-  const filtered = items;
+  // Category dropdown narrows the list; the product dropdown then picks one.
+  const filtered = itemId === '' ? items : items.filter((i) => Number(i.id) === itemId);
   const total = items.length;
 
   return (
@@ -43,11 +44,11 @@ export default function ItemsPage() {
       />
 
       <div className="flex items-center gap-2.5 mb-4 flex-wrap">
-        <SearchBar value={q} onChange={setQ} placeholder="Search by name or code…" />
-        <Select value={catFilter === 'All' ? 'All' : String(catFilter)} onChange={(e) => setCatFilter(e.target.value === 'All' ? 'All' : Number(e.target.value))} style={{ width: 200, height: 40 }}>
+        <Select value={catFilter === 'All' ? 'All' : String(catFilter)} onChange={(e) => { setCatFilter(e.target.value === 'All' ? 'All' : Number(e.target.value)); setItemId(''); }} style={{ width: 200, height: 40 }}>
           <option value="All">All categories</option>
           {cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </Select>
+        <ItemPicker items={items} value={itemId} onChange={setItemId} />
         <div className="ml-auto chip"><Box size={14} />{filtered.length} shown</div>
       </div>
 
@@ -97,6 +98,55 @@ export default function ItemsPage() {
           onClose={() => setEditing(null)}
           onSaved={() => { setEditing(null); void load(); }}
         />
+      )}
+    </div>
+  );
+}
+
+// Searchable product selector — pick by name or code, or "All products".
+function ItemPicker({ items, value, onChange }: {
+  items: Item[]; value: number | ''; onChange: (v: number | '') => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [open]);
+
+  const selected = items.find((i) => Number(i.id) === value);
+  const ql = q.trim().toLowerCase();
+  const list = ql ? items.filter((i) => i.name.toLowerCase().includes(ql) || i.code.toLowerCase().includes(ql)) : items;
+  const pick = (v: number | '') => { onChange(v); setOpen(false); setQ(''); };
+
+  return (
+    <div ref={ref} className="relative" style={{ width: 280 }}>
+      <button type="button" onClick={() => setOpen((o) => !o)} className="select flex items-center justify-between text-left w-full" style={{ height: 40, backgroundImage: 'none', paddingRight: 12 }}>
+        <span className="truncate" style={{ color: selected ? 'var(--text)' : 'var(--text-muted)' }}>{selected ? selected.name : 'All products'}</span>
+        <ChevronDown size={16} style={{ color: 'var(--text-faint)', flexShrink: 0 }} />
+      </button>
+      {open && (
+        <div className="absolute left-0 mt-1 z-30 w-full rounded-[9px] border border-border shadow-lg" style={{ background: 'var(--surface)' }}>
+          <div className="p-2 border-b border-border">
+            <div className="relative">
+              <Search size={15} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-faint)' }} />
+              <input autoFocus className="input" style={{ height: 34, paddingLeft: 32 }} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name or code…" />
+            </div>
+          </div>
+          <div style={{ maxHeight: 240, overflow: 'auto' }} className="py-1">
+            <button type="button" onClick={() => pick('')} className="w-full text-left px-3 py-2 text-[13px] hover:bg-surface-2" style={{ fontWeight: value === '' ? 700 : 400, background: value === '' ? 'var(--surface-2)' : undefined }}>All products</button>
+            {list.map((i) => (
+              <button key={i.id} type="button" onClick={() => pick(Number(i.id))} className="w-full text-left px-3 py-2 hover:bg-surface-2" style={{ background: Number(i.id) === value ? 'var(--surface-2)' : undefined }}>
+                <div className="text-[13px] font-medium">{i.name}</div>
+                <div className="text-[11.5px] mono" style={{ color: 'var(--text-muted)' }}>{i.code}{i.category?.name ? ` · ${i.category.name}` : ''}</div>
+              </button>
+            ))}
+            {list.length === 0 && <div className="px-3 py-3 text-[12px]" style={{ color: 'var(--text-faint)' }}>No matches</div>}
+          </div>
+        </div>
       )}
     </div>
   );

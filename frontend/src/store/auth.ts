@@ -6,7 +6,7 @@ interface AuthState {
   user: User | null;
   ready: boolean;
   bootstrap: () => Promise<void>;
-  login: (email: string, password: string, remember: boolean) => Promise<void>;
+  login: (username: string, password: string, remember: boolean) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -21,8 +21,8 @@ export const useAuth = create<AuthState>((set) => ({
       set({ user: null, ready: true });
     }
   },
-  async login(email, password, remember) {
-    const { data } = await http.post('/api/auth/login', { email, password, remember });
+  async login(username, password, remember) {
+    const { data } = await http.post('/api/auth/login', { username, password, remember });
     set({ user: data.user });
   },
   async logout() {
