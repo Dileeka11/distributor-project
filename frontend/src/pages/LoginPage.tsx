@@ -48,12 +48,14 @@ export default function LoginPage() {
         .lg-ring{position:absolute;border-radius:50%;border:1.5px solid rgba(255,255,255,.2);animation:lg-spin 34s linear infinite}
         @keyframes lg-spin{to{transform:rotate(360deg)}}
         .lg-card{position:relative;width:min(420px,92vw);border-radius:22px;padding:34px 32px;
-          background:rgba(255,255,255,.94);backdrop-filter:blur(16px);box-shadow:0 34px 90px rgba(0,0,0,.4);
+          background:#ffffff;color:#131822;box-shadow:0 34px 90px rgba(0,0,0,.4);
           animation:lg-in .55s cubic-bezier(.2,.9,.3,1)}
         @keyframes lg-in{from{opacity:0;transform:translateY(20px) scale(.97)}to{opacity:1;transform:none}}
         .lg-field{position:relative}
-        .lg-input{width:100%;height:46px;border-radius:12px;border:1.5px solid var(--border);background:var(--surface);
-          padding:0 14px 0 42px;font-size:14px;outline:none;transition:border-color .15s, box-shadow .15s;color:var(--text)}
+        .lg-input{width:100%;height:46px;border-radius:12px;border:1.5px solid #e2e6ec;background:#f8fafc;
+          padding:0 14px 0 42px;font-size:14px;outline:none;transition:border-color .15s, box-shadow .15s;color:#131822}
+        .lg-input::placeholder{color:#9aa3b2}
+        .lg-label{font-size:12.5px;font-weight:600;margin-bottom:6px;display:block;color:#5b6472}
         .lg-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in oklab,var(--accent) 22%, transparent)}
         .lg-ic{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--text-faint)}
       `}</style>
@@ -92,24 +94,24 @@ export default function LoginPage() {
         <div className="flex items-center gap-3 mb-6">
           <div className="grid place-items-center w-11 h-11 rounded-[13px] text-white text-lg font-extrabold" style={{ background: 'var(--accent)' }}>{logo}</div>
           <div>
-            <div className="font-extrabold text-[17px] tracking-tight">{company}</div>
-            <div className="text-[11.5px] font-medium" style={{ color: 'var(--text-faint)' }}>Distributor Management System</div>
+            <div className="font-extrabold text-[17px] tracking-tight" style={{ color: '#131822' }}>{company}</div>
+            <div className="text-[11.5px] font-medium" style={{ color: '#8a93a3' }}>Distributor Management System</div>
           </div>
         </div>
 
-        <h1 className="text-[23px] font-extrabold tracking-tight mb-1">Welcome back 👋</h1>
-        <p className="mb-6 text-[13.5px]" style={{ color: 'var(--text-muted)' }}>Sign in to continue to your workspace.</p>
+        <h1 className="text-[23px] font-extrabold tracking-tight mb-1" style={{ color: '#131822' }}>Welcome back 👋</h1>
+        <p className="mb-6 text-[13.5px]" style={{ color: '#5b6472' }}>Sign in to continue to your workspace.</p>
 
         <form onSubmit={onSubmit} className="flex flex-col gap-4">
           <div>
-            <label className="text-[12.5px] font-semibold mb-1.5 block" style={{ color: 'var(--text-muted)' }}>Username</label>
+            <label className="lg-label">Username</label>
             <div className="lg-field">
               <UserIcon size={17} className="lg-ic" />
               <input className="lg-input mono" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="admin" autoComplete="username" autoFocus />
             </div>
           </div>
           <div>
-            <label className="text-[12.5px] font-semibold mb-1.5 block" style={{ color: 'var(--text-muted)' }}>Password</label>
+            <label className="lg-label">Password</label>
             <div className="lg-field">
               <Lock size={17} className="lg-ic" />
               <input className="lg-input" type={show ? 'text' : 'password'} value={pw} onChange={(e) => setPw(e.target.value)} placeholder="••••••••" autoComplete="current-password" style={{ paddingRight: 44 }} />

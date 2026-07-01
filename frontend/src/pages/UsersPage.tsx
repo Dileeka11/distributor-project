@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Edit2, Trash2, ShieldCheck } from 'lucide-react';
+import { Plus, Edit2, Trash2, ShieldCheck, Eye, EyeOff } from 'lucide-react';
 import { http, apiErrorMessage } from '@/lib/http';
 import { toast, confirmDelete } from '@/lib/toast';
 import { PageHead } from '@/components/PageHead';
@@ -80,6 +80,7 @@ function UserModal({ rec, onClose, onSaved }: { rec: User | null; onClose: () =>
   const [password, setPassword] = useState('');
   const [isAdmin, setIsAdmin] = useState(rec?.is_admin ?? false);
   const [perms, setPerms] = useState<string[]>(rec?.permissions ?? []);
+  const [showPw, setShowPw] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const valid = name.trim() && username.trim() && (isNew ? password.trim() : true);
@@ -112,7 +113,14 @@ function UserModal({ rec, onClose, onSaved }: { rec: User | null; onClose: () =>
         <Field label="Full name" req><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Kasun Silva" /></Field>
         <Field label="Username" req hint="Used to sign in."><Input className="mono" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="e.g. cashier1" /></Field>
         <Field label="Email"><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
-        <Field label={isNew ? 'Password' : 'New password'} req={isNew} hint={isNew ? undefined : 'Leave blank to keep current.'}><Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" /></Field>
+        <Field label={isNew ? 'Password' : 'New password'} req={isNew} hint={isNew ? undefined : 'Leave blank to keep current.'}>
+          <div className="relative">
+            <Input type={showPw ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" style={{ paddingRight: 40 }} />
+            <button type="button" onClick={() => setShowPw((s) => !s)} aria-label={showPw ? 'Hide password' : 'Show password'} className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-muted)' }}>
+              {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
+        </Field>
       </div>
 
       <label className="flex items-center gap-2.5 text-[14px] cursor-pointer mt-4">
