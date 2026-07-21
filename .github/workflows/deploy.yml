@@ -37,6 +37,7 @@ jobs:
         working-directory: backend
         run: |
           cp .env.example .env
+          touch database/database.sqlite
           composer install --no-dev --optimize-autoloader --no-interaction
 
       # ---------- Deploy BACKEND via FTP ----------
@@ -57,6 +58,7 @@ jobs:
             .env
             .env.*
             storage/**
+            database/database.sqlite
             artisan.zip
 
       # ---------- Deploy FRONTEND via FTP ----------
