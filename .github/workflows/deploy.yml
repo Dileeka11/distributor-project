@@ -1,0 +1,76 @@
+name: Deploy to server
+
+# main branch එකට push කරන හැම වෙලාවකම මේක auto run වෙනවා
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:   # GitHub UI එකෙන් අතින් run කරන්නත් පුළුවන්
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1) Repo එක checkout කරගන්නවා
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ---------- FRONTEND (React) build ----------
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      # ---------- BACKEND (Laravel) dependencies ----------
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: |
+          cp .env.example .env
+          composer install --no-dev --optimize-autoloader --no-interaction
+
+      # ---------- Deploy BACKEND via FTP ----------
+      # server එකේ .env, storage, vendor-cache වගේ දේවල් overwrite/delete වෙන්නේ නෑ (exclude කරලා)
+      - name: Deploy backend
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftp          # SSL/TLS නම් 'ftps' කරන්න
+          local-dir: ./backend/
+          server-dir: /backend/
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/node_modules/**
+            .env
+            .env.*
+            storage/**
+            artisan.zip
+
+      # ---------- Deploy FRONTEND via FTP ----------
+      # frontend/dist එකේ content එක server frontend/ එකට යනවා
+      - name: Deploy frontend
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftp
+          local-dir: ./frontend/dist/
+          server-dir: /frontend/
+          exclude: |
+            **/.git*
+            **/.git*/**
+            .htaccess
