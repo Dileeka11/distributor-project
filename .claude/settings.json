@@ -10,7 +10,16 @@
       "Bash(rm -rf vendor composer.lock)",
       "Bash(composer install *)",
       "Bash(cp .env .env.bak)",
-      "Bash(cp .env.production .env)"
+      "Bash(cp .env.production .env)",
+      "Bash(git add *)",
+      "Bash(git commit -m 'ci: auto-deploy backend & frontend to server via FTP *)",
+      "Bash(git push *)",
+      "Bash(gh run *)",
+      "Bash(git commit -m 'ci: use npm install to avoid cross-platform lock mismatch *)",
+      "Bash(git commit -m 'ci: create sqlite file for composer scripts; exclude it from deploy *)",
+      "Bash(git commit -m 'ci: use ftps for FTP deploy connection *)",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('status:',d['status'],'conclusion:',d['conclusion']\\); [print\\(' ',s['name'],'->',s['conclusion'] or s['status']\\) for j in d['jobs'] for s in j['steps']]\")"
     ]
   }
 }

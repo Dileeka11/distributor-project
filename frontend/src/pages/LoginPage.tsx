@@ -6,6 +6,14 @@ import { useSettings } from '@/store/settings';
 import { Button } from '@/components/ui/Button';
 import { Switch } from '@/components/ui/Common';
 import { apiErrorMessage } from '@/lib/http';
+import { alertError } from '@/lib/toast';
+
+// Turn backend / validation strings into a friendly sign-in message.
+function friendlyLoginError(raw: string): string {
+  if (/auth\.failed/i.test(raw)) return 'The username or password you entered is incorrect.';
+  if (/required/i.test(raw)) return 'Please enter both your username and password.';
+  return raw;
+}
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -25,13 +33,20 @@ export default function LoginPage() {
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!valid) { setErr('Enter your username and password to sign in.'); return; }
+    if (!valid) {
+      const m = 'Please enter both your username and password.';
+      setErr(m);
+      void alertError('Missing details', m);
+      return;
+    }
     setBusy(true); setErr(null);
     try {
       await login(username.trim(), pw, remember);
       navigate('/', { replace: true });
     } catch (e2) {
-      setErr(apiErrorMessage(e2, 'Login failed'));
+      const msg = friendlyLoginError(apiErrorMessage(e2, 'Login failed'));
+      setErr(msg);
+      void alertError('Sign in failed', msg);
     } finally { setBusy(false); }
   }
 

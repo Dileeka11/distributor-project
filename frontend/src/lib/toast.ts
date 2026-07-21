@@ -20,6 +20,17 @@ export function toast(msg: string, kind: 'ok' | 'err' = 'ok'): void {
   void ToastMixin.fire({ icon: kind === 'ok' ? 'success' : 'error', title: msg });
 }
 
+// Centered SweetAlert modal used for blocking errors (e.g. failed sign in).
+export function alertError(title: string, text?: string): Promise<void> {
+  return Swal.fire({
+    icon: 'error',
+    title,
+    text,
+    confirmButtonText: 'OK',
+    confirmButtonColor: cssVar('--accent', '#C8102E'),
+  }).then(() => undefined);
+}
+
 // SweetAlert confirmation used for destructive actions (delete).
 export function confirmDelete(opts: { title?: string; html?: string; confirmText?: string } = {}): Promise<boolean> {
   return Swal.fire({
