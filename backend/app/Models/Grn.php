@@ -15,7 +15,7 @@ class Grn extends Model
 
     protected $fillable = [
         'no', 'date', 'type', 'supplier_id',
-        'subtotal', 'tax_rate', 'tax_amount', 'total', 'paid', 'status', 'created_by',
+        'subtotal', 'tax_rate', 'tax_amount', 'total', 'paid', 'advance', 'status', 'created_by',
     ];
 
     protected $casts = [
@@ -25,6 +25,7 @@ class Grn extends Model
         'tax_amount' => 'decimal:2',
         'total' => 'decimal:2',
         'paid' => 'decimal:2',
+        'advance' => 'decimal:2',
     ];
 
     public function supplier(): BelongsTo
@@ -35,6 +36,11 @@ class Grn extends Model
     public function lines(): HasMany
     {
         return $this->hasMany(GrnLine::class);
+    }
+
+    public function cheques(): HasMany
+    {
+        return $this->hasMany(GrnCheque::class);
     }
 
     public function getBalanceAttribute(): float

@@ -11,6 +11,12 @@ return new class extends Migration
      */
     public function up(): void
     {
+        // Laravel Sanctum auto-loads its own personal_access_tokens migration
+        // from the package, so only create the table if it doesn't exist yet.
+        if (Schema::hasTable('personal_access_tokens')) {
+            return;
+        }
+
         Schema::create('personal_access_tokens', function (Blueprint $table) {
             $table->id();
             $table->morphs('tokenable');

@@ -30,9 +30,21 @@ export interface Supplier extends Party {
 }
 
 export interface Customer extends Party {
+  city: string | null;
   type: string;
+  cash_discount: string | number;
+  cheque_discount: string | number;
+  terms_days: number;
   credit_limit: string | number;
+  description: string | null;
   balance: string | number;
+  opening_collected?: string | number;
+  paid_total?: string | number;
+}
+
+export interface CustomerType {
+  id: ID;
+  name: string;
 }
 
 export type TxnType = 'cash' | 'credit';
@@ -41,10 +53,19 @@ export type TxnStatus = 'paid' | 'partial' | 'unpaid';
 export interface InvoiceLine {
   id?: ID;
   item_id: ID;
+  batch_id?: ID | null;
   name: string;
   qty: string | number;
   price: string | number;
   total: string | number;
+}
+
+export interface ItemBatch {
+  id: ID;
+  unit_price: string | number;
+  discount: string | number;
+  unit_cost: string | number;
+  qty_remaining: number;
 }
 
 export interface Invoice {
@@ -55,12 +76,52 @@ export interface Invoice {
   customer_id: ID;
   customer?: Customer;
   subtotal: string | number;
+  cash_discount?: string | number;
+  cheque_discount?: string | number;
+  discount_amount?: string | number;
   tax_rate: string | number;
   tax_amount: string | number;
   total: string | number;
   paid: string | number;
+  advance?: string | number; // up-front amount paid now (stable; excludes later collections)
   status: TxnStatus;
   lines?: InvoiceLine[];
+  cheques?: Cheque[];
+}
+
+export interface Cheque {
+  id?: ID;
+  cheque_no: string | null;
+  cheque_date: string | null;
+  amount: string | number;
+}
+
+export interface ChequeRecord {
+  id: ID;
+  invoice_id: ID;
+  invoice_no: string;
+  customer_id: ID;
+  customer_name: string;
+  cheque_no: string | null;
+  cheque_date: string | null;
+  amount: string | number;
+  invoice_total: string | number;
+  invoice_paid: string | number;
+  cleared: boolean;
+}
+
+export interface GrnChequeRecord {
+  id: ID;
+  grn_id: ID;
+  grn_no: string;
+  supplier_id: ID;
+  supplier_name: string;
+  cheque_no: string | null;
+  cheque_date: string | null;
+  amount: string | number;
+  grn_total: string | number;
+  grn_paid: string | number;
+  cleared: boolean;
 }
 
 export interface GrnLine {
@@ -68,6 +129,8 @@ export interface GrnLine {
   item_id: ID;
   name: string;
   qty: string | number;
+  unit_price?: string | number;
+  discount?: string | number;
   price: string | number;
   total: string | number;
 }
@@ -84,8 +147,10 @@ export interface Grn {
   tax_amount: string | number;
   total: string | number;
   paid: string | number;
+  advance?: string | number; // up-front amount paid now (stable; excludes later payments)
   status: TxnStatus;
   lines?: GrnLine[];
+  cheques?: Cheque[];
 }
 
 export interface Settlement {
@@ -100,6 +165,32 @@ export interface Settlement {
   amount: string | number;
   mode: string;
   reference?: string | null;
+  cheque_date?: string | null;
+  cheques?: SettlementCheque[];
+  passed?: boolean;
+}
+
+export interface SettlementCheque {
+  id?: ID;
+  cheque_no: string | null;
+  cheque_date: string | null;
+  amount: string | number;
+  cleared_at?: string | null;
+}
+
+export interface SettlementChequeRecord {
+  id: ID;
+  settlement_id: ID;
+  settlement_code: string;
+  side: 'receivable' | 'payable';
+  customer_id?: ID | null;
+  supplier_id?: ID | null;
+  party_name: string | null;
+  cheque_no: string | null;
+  cheque_date: string | null;
+  amount: string | number;
+  settlement_amount: string | number;
+  cleared: boolean;
 }
 
 export interface AppSettings {
@@ -118,7 +209,65 @@ export interface AppSettings {
   address?: string;
 }
 
-export interface User { id: ID; name: string; email: string; }
+export interface User {
+  id: ID;
+  name: string;
+  username?: string | null;
+  email?: string | null;
+  is_admin?: boolean;
+  permissions?: string[];
+}
+
+export interface JobRole {
+  id: ID;
+  name: string;
+}
+
+export interface Employee {
+  id: ID;
+  code: string;
+  name: string;
+  role: string | null;
+  phone: string | null;
+  email: string | null;
+  basic_salary: string | number;
+  hourly_rate: string | number;
+  work_hours: string | number;   // standard hours per day; OT starts beyond this
+  ot_rate: string | number;      // overtime rate (LKR / hour)
+  join_date: string | null;
+  active: boolean;
+}
+
+export interface Attendance {
+  id: ID;
+  employee_id: ID;
+  employee?: Employee;
+  date: string;
+  clock_in: string | null;
+  clock_out: string | null;
+  total_hours: string | number;
+  status: string; // present | absent | leave | half-day
+}
+
+export interface Payroll {
+  id: ID;
+  code: string;
+  employee_id: ID;
+  employee?: Employee;
+  month: number;
+  year: number;
+  days_worked: number;
+  total_hours: string | number;
+  ot_hours: string | number;
+  basic_salary: string | number;
+  hours_pay: string | number;
+  ot_pay: string | number;
+  bonus: string | number;
+  gross_pay: string | number;
+  deductions: string | number;
+  net_pay: string | number;
+  generated_at: string | null;
+}
 
 export interface DashboardPayload {
   totals: {
@@ -129,5 +278,6 @@ export interface DashboardPayload {
   recent_invoices: Invoice[];
   top_receivables: Pick<Customer, 'id' | 'code' | 'name' | 'credit_limit' | 'balance'>[];
   sales_series: { date: string; label: string; cash: number; credit: number; }[];
+  sales_month: string;
   inventory_by_category: { label: string; value: number; }[];
 }

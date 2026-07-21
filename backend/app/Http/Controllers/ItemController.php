@@ -9,14 +9,24 @@ use Illuminate\Http\Request;
 
 class ItemController extends Controller
 {
+    public function batches(Item $item): JsonResponse
+    {
+        $batches = $item->batches()
+            ->where('qty_remaining', '>', 0)
+            ->orderBy('id')
+            ->get(['id', 'unit_price', 'discount', 'unit_cost', 'qty_remaining']);
+
+        return response()->json(['data' => $batches]);
+    }
+
     public function index(Request $request): JsonResponse
     {
-        $q = $request->string('q')->trim();
-        $category = $request->integer('category_id');
+        $q = trim((string) $request->input('q'));
+        $category = (int) $request->input('category_id');
 
         $items = Item::query()
             ->with('category:id,name')
-            ->when($q->isNotEmpty(), fn ($qb) => $qb->where(function ($w) use ($q) {
+            ->when($q !== '', fn ($qb) => $qb->where(function ($w) use ($q) {
                 $w->where('name', 'like', "%{$q}%")->orWhere('code', 'like', "%{$q}%");
             }))
             ->when($category, fn ($qb) => $qb->where('category_id', $category))

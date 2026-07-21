@@ -11,14 +11,17 @@ class CustomerController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $q = $request->string('q')->trim();
+        $q = trim((string) $request->input('q'));
+        $type = trim((string) $request->input('type'));
 
         $rows = Customer::query()
-            ->when($q->isNotEmpty(), fn ($qb) => $qb->where(function ($w) use ($q) {
+            ->withSum('invoices as paid_total', 'paid')
+            ->when($q !== '', fn ($qb) => $qb->where(function ($w) use ($q) {
                 $w->where('name', 'like', "%{$q}%")
                     ->orWhere('code', 'like', "%{$q}%")
                     ->orWhere('contact', 'like', "%{$q}%");
             }))
+            ->when($type !== '', fn ($qb) => $qb->where('type', $type))
             ->orderBy('name')->get();
 
         return response()->json(['data' => $rows]);

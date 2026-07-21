@@ -3,8 +3,8 @@ import { X } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
 export function Modal({
-  title, onClose, footer, children, lg,
-}: { title: ReactNode; onClose: () => void; footer?: ReactNode; children: ReactNode; lg?: boolean }) {
+  title, onClose, footer, children, lg, xl,
+}: { title: ReactNode; onClose: () => void; footer?: ReactNode; children: ReactNode; lg?: boolean; xl?: boolean }) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', handler);
@@ -25,7 +25,7 @@ export function Modal({
       <div
         className={cn(
           'card flex flex-col w-full',
-          lg ? 'max-w-[880px]' : 'max-w-[620px]',
+          xl ? 'max-w-[1080px]' : lg ? 'max-w-[880px]' : 'max-w-[620px]',
         )}
         style={{ boxShadow: 'var(--shadow-lg, 0 24px 60px rgba(0,0,0,0.18))', maxHeight: 'calc(100vh - 48px)', animation: 'pop .18s cubic-bezier(.2,.9,.3,1)', borderRadius: 16 }}
         onClick={(e) => e.stopPropagation()}

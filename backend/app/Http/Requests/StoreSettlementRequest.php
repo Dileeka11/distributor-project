@@ -19,6 +19,11 @@ class StoreSettlementRequest extends FormRequest
             'amount' => ['required', 'numeric', 'min:0.01'],
             'mode' => ['required', 'string', 'max:40'],
             'reference' => ['nullable', 'string', 'max:80'],
+            'cheque_date' => ['nullable', 'date'],
+            'cheques' => ['nullable', 'array'],
+            'cheques.*.no' => ['nullable', 'string', 'max:60'],
+            'cheques.*.date' => ['nullable', 'date'],
+            'cheques.*.amount' => ['nullable', 'numeric', 'min:0'],
         ];
     }
 }

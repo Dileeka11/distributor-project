@@ -12,15 +12,15 @@ class NumberService
      * Reserve & return the next sequential number for a model & prefix.
      * Uses a SELECT FOR UPDATE within a transaction to avoid duplicates.
      */
-    public static function next(string $modelClass, string $prefix, int $pad = 4): string
+    public static function next(string $modelClass, string $prefix, int $pad = 4, string $column = 'no'): string
     {
-        return DB::transaction(function () use ($modelClass, $prefix, $pad) {
+        return DB::transaction(function () use ($modelClass, $prefix, $pad, $column) {
             /** @var class-string<Model> $modelClass */
             $latest = $modelClass::query()
-                ->where('no', 'like', $prefix.'%')
+                ->where($column, 'like', $prefix.'%')
                 ->lockForUpdate()
                 ->orderByDesc('id')
-                ->value('no');
+                ->value($column);
 
             $n = 0;
             if ($latest) {

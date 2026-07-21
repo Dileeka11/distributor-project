@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, X, Check, Truck, Wallet, PackageOpen, Clock, Box, Download } from 'lucide-react';
+import { Plus, X, Check, Truck, Wallet, PackageOpen, Clock, Box, Download, Edit2, Trash2 } from 'lucide-react';
 import { http, apiErrorMessage } from '@/lib/http';
 import { fmt, fmt0, compact, prettyDate } from '@/lib/format';
-import { toast } from '@/lib/toast';
+import { toast, confirmDelete } from '@/lib/toast';
 import { useSettings } from '@/store/settings';
 import { PageHead } from '@/components/PageHead';
 import { Button } from '@/components/ui/Button';
@@ -15,14 +15,18 @@ import type { Grn, Item, Supplier } from '@/types';
 
 type Tab = 'all' | 'cash' | 'credit';
 
-interface DraftLine { item_id: number | ''; qty: string; price: string; }
-const blankLine = (): DraftLine => ({ item_id: '', qty: '1', price: '0' });
+interface DraftLine { item_id: number | ''; qty: string; unit_price: string; discount: string; }
+const blankLine = (): DraftLine => ({ item_id: '', qty: '1', unit_price: '0', discount: '0' });
+const unitCost = (l: DraftLine) => (Number(l.unit_price) || 0) * (1 - (Number(l.discount) || 0) / 100);
+
+interface ChequeRow { no: string; date: string; amount: string; }
 
 export default function GrnsPage() {
   const [rows, setRows] = useState<Grn[]>([]);
   const [q, setQ] = useState('');
   const [tab, setTab] = useState<Tab>('all');
   const [create, setCreate] = useState(false);
+  const [editGrn, setEditGrn] = useState<Grn | null>(null);
   const [view, setView] = useState<Grn | null>(null);
 
   const load = () => http.get('/api/grns', { params: { q, type: tab === 'all' ? undefined : tab } }).then((r) => setRows(r.data.data));
@@ -53,7 +57,7 @@ export default function GrnsPage() {
 
       <div className="card overflow-hidden">
         <table className="tbl">
-          <thead><tr><th>GRN</th><th>Date</th><th>Supplier</th><th>Type</th><th className="num">Total</th><th className="num">Balance</th><th>Status</th></tr></thead>
+          <thead><tr><th>GRN</th><th>Date</th><th>Supplier</th><th>Type</th><th className="num">Total</th><th className="num">Balance</th><th>Status</th><th></th></tr></thead>
           <tbody>
             {rows.map((g) => {
               const st = statusBadge(g.status);
@@ -72,6 +76,16 @@ export default function GrnsPage() {
                   <td className="num money font-bold">{fmt(g.total as number)}</td>
                   <td className="num money" style={{ color: bal > 0 ? 'var(--red)' : 'var(--text-faint)' }}>{bal > 0 ? fmt(bal) : '—'}</td>
                   <td><Badge kind={st.kind} dot>{st.label}</Badge></td>
+                  <td className="num" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex gap-1.5 justify-end">
+                      <Button variant="subtle" size="sm" icon={<Edit2 size={14} />} onClick={() => setEditGrn(g)} />
+                      <Button variant="subtle" size="sm" icon={<Trash2 size={14} />} onClick={async () => {
+                        if (!(await confirmDelete({ title: 'Delete GRN?', html: `Delete <b>${g.no}</b>? Received stock will be removed${g.type === 'credit' ? " and the supplier's payable reversed" : ''}.` }))) return;
+                        try { await http.delete(`/api/grns/${g.id}`); toast('GRN deleted'); void load(); }
+                        catch (e) { toast(apiErrorMessage(e), 'err'); }
+                      }} />
+                    </div>
+                  </td>
                 </tr>
               );
             })}
@@ -80,19 +94,51 @@ export default function GrnsPage() {
         {rows.length === 0 && <Empty icon={<PackageOpen size={40} />} title="No GRNs yet" sub="Record a goods-received note to add stock." />}
       </div>
 
-      {create && <CreateGrn onClose={() => setCreate(false)} onSaved={() => { setCreate(false); void load(); }} />}
+      {(create || editGrn) && (
+        <CreateGrn
+          editGrn={editGrn}
+          onClose={() => { setCreate(false); setEditGrn(null); }}
+          onSaved={() => { setCreate(false); setEditGrn(null); void load(); }}
+        />
+      )}
       {view && <ViewGrn grn={view} onClose={() => setView(null)} />}
     </div>
   );
 }
 
-function CreateGrn({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+function CreateGrn({ editGrn, onClose, onSaved }: { editGrn?: Grn | null; onClose: () => void; onSaved: () => void }) {
   const { settings } = useSettings();
   const taxRate = Number(settings.tax_rate ?? 0);
+  const isEdit = !!editGrn;
   const [type, setType] = useState<'cash' | 'credit'>('credit');
   const [supplierId, setSupplierId] = useState<number | ''>('');
   const [lines, setLines] = useState<DraftLine[]>([blankLine()]);
   const [paid, setPaid] = useState('');
+  const [cheques, setCheques] = useState<ChequeRow[]>([]);
+
+  // When editing, load the full GRN (lines + cheques) and pre-fill the form.
+  useEffect(() => {
+    if (!editGrn) return;
+    void http.get(`/api/grns/${editGrn.id}`).then((r) => {
+      const d: Grn = r.data.data;
+      setType(d.type);
+      setSupplierId(Number(d.supplier_id));
+      setLines((d.lines ?? []).map((l) => ({
+        item_id: Number(l.item_id),
+        qty: String(Number(l.qty)),
+        unit_price: String(Number(l.unit_price ?? l.price)),
+        discount: String(Number(l.discount ?? 0)),
+      })));
+      setPaid(d.type === 'credit' ? String(Number(d.advance ?? d.paid)) : '');
+      setCheques((d.cheques ?? []).map((c) => ({ no: c.cheque_no ?? '', date: c.cheque_date ? String(c.cheque_date).slice(0, 10) : '', amount: String(Number(c.amount)) })));
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editGrn]);
+
+  const addCheque = () => setCheques((cs) => [...cs, { no: '', date: '', amount: '' }]);
+  const delCheque = (i: number) => setCheques((cs) => cs.filter((_, idx) => idx !== i));
+  const setCheque = (i: number, patch: Partial<ChequeRow>) =>
+    setCheques((cs) => cs.map((c, idx) => (idx === i ? { ...c, ...patch } : c)));
 
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [items, setItems] = useState<Item[]>([]);
@@ -104,7 +150,7 @@ function CreateGrn({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
   }, []);
 
   const totals = useMemo(() => {
-    const subtotal = lines.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.price) || 0), 0);
+    const subtotal = lines.reduce((s, l) => s + (Number(l.qty) || 0) * unitCost(l), 0);
     const taxAmt = (subtotal * taxRate) / 100;
     const total = subtotal + taxAmt;
     const paidNum = type === 'cash' ? total : Math.min(Number(paid) || 0, total);
@@ -118,7 +164,7 @@ function CreateGrn({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
     setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
   const pickItem = (i: number, id: number | '') => {
     const item = items.find((x) => x.id === id);
-    setLine(i, { item_id: id, price: item ? String(item.distributor_price) : '0' });
+    setLine(i, { item_id: id, unit_price: item ? String(item.distributor_price) : '0' });
   };
   const addLine = () => setLines((ls) => [...ls, blankLine()]);
   const delLine = (i: number) => setLines((ls) => (ls.length > 1 ? ls.filter((_, idx) => idx !== i) : ls));
@@ -130,12 +176,19 @@ function CreateGrn({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
     if (!canSave) return;
     setBusy(true);
     try {
-      await http.post('/api/grns', {
+      const payload = {
         type, supplier_id: supplierId, tax_rate: taxRate,
         paid: type === 'cash' ? totals.total : Number(paid) || 0,
-        lines: validLines.map((l) => ({ item_id: l.item_id, qty: Number(l.qty), price: Number(l.price) })),
-      });
-      toast('GRN created');
+        lines: validLines.map((l) => ({ item_id: l.item_id, qty: Number(l.qty), unit_price: Number(l.unit_price) || 0, discount: Number(l.discount) || 0 })),
+        cheques: type === 'credit'
+          ? cheques
+              .filter((c) => c.no.trim() || c.date || Number(c.amount) > 0)
+              .map((c) => ({ no: c.no.trim() || null, date: c.date || null, amount: Number(c.amount) || 0 }))
+          : [],
+      };
+      if (isEdit) await http.put(`/api/grns/${editGrn!.id}`, payload);
+      else await http.post('/api/grns', payload);
+      toast(isEdit ? 'GRN updated' : 'GRN created');
       onSaved();
     } catch (e) { toast(apiErrorMessage(e), 'err'); }
     finally { setBusy(false); }
@@ -143,8 +196,8 @@ function CreateGrn({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
 
   return (
     <Modal
-      lg
-      title="New Goods Received Note"
+      xl
+      title={isEdit ? `Edit GRN ${editGrn!.no}` : 'New Goods Received Note'}
       onClose={onClose}
       footer={
         <>
@@ -153,7 +206,7 @@ function CreateGrn({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
             <span className="text-[20px] font-extrabold mono">Rs {fmt(totals.total)}</span>
           </div>
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button variant="primary" disabled={!canSave} onClick={save}>Receive {type === 'cash' ? 'Cash' : 'Credit'} GRN</Button>
+          <Button variant="primary" disabled={!canSave} onClick={save}>{isEdit ? 'Save changes' : `Receive ${type === 'cash' ? 'Cash' : 'Credit'} GRN`}</Button>
         </>
       }
     >
@@ -191,10 +244,12 @@ function CreateGrn({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
         <table className="w-full border-collapse">
           <thead>
             <tr>
-              <th className="text-left text-[11px] uppercase tracking-wider font-bold p-2" style={{ color: 'var(--text-faint)', width: '44%' }}>Product</th>
-              <th className="text-right text-[11px] uppercase font-bold p-2" style={{ color: 'var(--text-faint)', width: 80 }}>Qty in</th>
-              <th className="text-right text-[11px] uppercase font-bold p-2" style={{ color: 'var(--text-faint)', width: 110 }}>Cost</th>
-              <th className="text-right text-[11px] uppercase font-bold p-2" style={{ color: 'var(--text-faint)' }}>Amount</th>
+              <th className="text-left text-[11px] uppercase tracking-wider font-bold p-2" style={{ color: 'var(--text-faint)', width: '30%' }}>Product</th>
+              <th className="text-right text-[11px] uppercase font-bold p-2" style={{ color: 'var(--text-faint)', width: 110 }}>Unit price</th>
+              <th className="text-right text-[11px] uppercase font-bold p-2" style={{ color: 'var(--text-faint)', width: 80 }}>Disc %</th>
+              <th className="text-right text-[11px] uppercase font-bold p-2" style={{ color: 'var(--text-faint)', width: 100 }}>Unit cost</th>
+              <th className="text-right text-[11px] uppercase font-bold p-2" style={{ color: 'var(--text-faint)', width: 70 }}>Qty in</th>
+              <th className="text-right text-[11px] uppercase font-bold p-2" style={{ color: 'var(--text-faint)' }}>Total cost</th>
               <th style={{ width: 36 }}></th>
             </tr>
           </thead>
@@ -208,11 +263,13 @@ function CreateGrn({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
                       <option value="">Select item…</option>
                       {items.map((x) => <option key={x.id} value={x.id}>{x.code} · {x.name}</option>)}
                     </Select>
-                    {it && <div className="text-[12px] mt-1" style={{ color: 'var(--text-muted)' }}>On hand: {fmt0(it.stock)} · cost Rs {fmt(it.distributor_price as number)}</div>}
+                    {it && <div className="text-[12px] mt-1" style={{ color: 'var(--text-muted)' }}>On hand: {fmt0(it.stock)} · last cost Rs {fmt(it.distributor_price as number)}</div>}
                   </td>
+                  <td className="p-1.5"><Input className="mono text-right" value={l.unit_price} onChange={(e) => setLine(i, { unit_price: e.target.value.replace(/[^\d.]/g, '') })} style={{ height: 36 }} /></td>
+                  <td className="p-1.5"><Input className="mono text-right" value={l.discount} onChange={(e) => setLine(i, { discount: e.target.value.replace(/[^\d.]/g, '') })} style={{ height: 36 }} /></td>
+                  <td className="p-1.5 text-right money" style={{ color: 'var(--text-muted)' }}>{fmt(unitCost(l))}</td>
                   <td className="p-1.5"><Input className="mono text-right" value={l.qty} onChange={(e) => setLine(i, { qty: e.target.value.replace(/\D/g, '') })} style={{ height: 36 }} /></td>
-                  <td className="p-1.5"><Input className="mono text-right" value={l.price} onChange={(e) => setLine(i, { price: e.target.value.replace(/[^\d.]/g, '') })} style={{ height: 36 }} /></td>
-                  <td className="p-1.5 text-right money font-semibold">{fmt((Number(l.qty) || 0) * (Number(l.price) || 0))}</td>
+                  <td className="p-1.5 text-right money font-semibold">{fmt((Number(l.qty) || 0) * unitCost(l))}</td>
                   <td className="p-1.5 text-right">
                     <button className="grid place-items-center w-7 h-7 rounded-md hover:bg-surface-2" onClick={() => delLine(i)} type="button"><X size={15} /></button>
                   </td>
@@ -237,6 +294,32 @@ function CreateGrn({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
           <div className="mt-3 text-[12px] flex gap-2 items-center" style={{ color: 'var(--text-faint)' }}>
             <Box size={15} /> {validLines.reduce((s, l) => s + (Number(l.qty) || 0), 0).toLocaleString()} units will be added to stock.
           </div>
+
+          {type === 'credit' && (
+            <div className="mt-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-[13px] font-semibold" style={{ color: 'var(--text-muted)' }}>Cheque details</div>
+                <Button variant="subtle" size="sm" icon={<Plus size={13} />} onClick={addCheque}>Add cheque</Button>
+              </div>
+              {cheques.length === 0 ? (
+                <div className="text-[12px]" style={{ color: 'var(--text-faint)' }}>No cheques. Use “Add cheque” to record cheques given to the supplier.</div>
+              ) : (
+                <div className="flex flex-col gap-1.5">
+                  {cheques.map((c, i) => (
+                    <div key={i} className="flex gap-1.5 items-center">
+                      <Input placeholder="Cheque no." value={c.no} onChange={(e) => setCheque(i, { no: e.target.value })} className="mono" style={{ height: 34, flex: 1, minWidth: 0 }} />
+                      <Input type="date" value={c.date} onChange={(e) => setCheque(i, { date: e.target.value })} style={{ height: 34, width: 140 }} />
+                      <Input placeholder="0.00" inputMode="decimal" value={c.amount} onChange={(e) => setCheque(i, { amount: e.target.value.replace(/[^\d.]/g, '') })} className="mono text-right" style={{ height: 34, width: 96 }} />
+                      <button type="button" className="grid place-items-center w-7 h-7 rounded-md hover:bg-surface-2 flex-shrink-0" onClick={() => delCheque(i)}><X size={14} /></button>
+                    </div>
+                  ))}
+                  <div className="text-[11.5px] mt-0.5" style={{ color: 'var(--text-faint)' }}>
+                    Recorded for reference — clear them later in Outstanding. Total: Rs {fmt(cheques.reduce((s, c) => s + (Number(c.amount) || 0), 0))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
         <div className="rounded-[10px] p-4" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
           <TotalRow k="Subtotal" v={fmt(totals.subtotal)} />

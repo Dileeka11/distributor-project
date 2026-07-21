@@ -11,10 +11,10 @@ class SupplierController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $q = $request->string('q')->trim();
+        $q = trim((string) $request->input('q'));
 
         $rows = Supplier::query()
-            ->when($q->isNotEmpty(), fn ($qb) => $qb->where(function ($w) use ($q) {
+            ->when($q !== '', fn ($qb) => $qb->where(function ($w) use ($q) {
                 $w->where('name', 'like', "%{$q}%")
                     ->orWhere('code', 'like', "%{$q}%")
                     ->orWhere('contact', 'like', "%{$q}%");

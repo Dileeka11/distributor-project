@@ -126,6 +126,10 @@ body {
   .tbl tbody tr:hover { background: var(--surface-2); }
   .row-click { cursor: pointer; }
 
+  /* Long tables scroll within the viewport instead of stretching the page; the header stays pinned. */
+  .card:has(> .tbl) { max-height: calc(100vh - 220px); overflow: auto; }
+  .tbl thead th { position: sticky; top: 0; z-index: 2; box-shadow: inset 0 -1px 0 var(--border); }
+
   .bar { @apply h-[7px] rounded-md overflow-hidden; background: var(--surface-3); }
   .bar > span { @apply block h-full rounded-md; background: var(--accent); }
 

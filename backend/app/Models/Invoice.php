@@ -13,16 +13,21 @@ class Invoice extends Model
 
     protected $fillable = [
         'no', 'date', 'type', 'customer_id',
-        'subtotal', 'tax_rate', 'tax_amount', 'total', 'paid', 'status', 'created_by',
+        'subtotal', 'cash_discount', 'cheque_discount', 'discount_amount',
+        'tax_rate', 'tax_amount', 'total', 'paid', 'advance', 'status', 'created_by',
     ];
 
     protected $casts = [
         'date' => 'date',
         'subtotal' => 'decimal:2',
+        'cash_discount' => 'decimal:2',
+        'cheque_discount' => 'decimal:2',
+        'discount_amount' => 'decimal:2',
         'tax_rate' => 'decimal:2',
         'tax_amount' => 'decimal:2',
         'total' => 'decimal:2',
         'paid' => 'decimal:2',
+        'advance' => 'decimal:2',
     ];
 
     public function customer(): BelongsTo
@@ -33,6 +38,11 @@ class Invoice extends Model
     public function lines(): HasMany
     {
         return $this->hasMany(InvoiceLine::class);
+    }
+
+    public function cheques(): HasMany
+    {
+        return $this->hasMany(InvoiceCheque::class);
     }
 
     public function getBalanceAttribute(): float

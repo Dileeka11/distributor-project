@@ -3,28 +3,71 @@ import { fmt0, compact } from '@/lib/format';
 
 interface DailyRow { label: string; cash: number; credit: number; }
 
+// Round a value up to a clean axis maximum (1/2/2.5/5 × 10ⁿ).
+function niceCeil(n: number): number {
+  if (n <= 0) return 1;
+  const pow = Math.pow(10, Math.floor(Math.log10(n)));
+  const f = n / pow;
+  const nice = f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10;
+  return nice * pow;
+}
+
 export function SalesBarChart({ data }: { data: DailyRow[] }) {
-  const max = Math.max(...data.map((d) => d.cash + d.credit), 1);
-  const W = 100; // pct
+  if (!data.length) return <div className="text-[13px] py-10 text-center" style={{ color: 'var(--text-faint)' }}>No sales this month.</div>;
+
+  const rawMax = Math.max(...data.map((d) => d.cash + d.credit), 1);
+  const step = niceCeil(rawMax / 4);             // round gridline interval
+  const tickCount = Math.max(1, Math.ceil(rawMax / step));
+  const max = step * tickCount;
+  const ticks = Array.from({ length: tickCount + 1 }, (_, i) => step * (tickCount - i)); // max … 0
   const barW = 100 / data.length;
+  const H = 180;
+  const AX = 44; // width reserved for the y-axis value labels
+  const labelStep = Math.max(1, Math.ceil(data.length / 8));
+
   return (
-    <svg viewBox={`0 0 ${W} 50`} preserveAspectRatio="none" className="w-full h-[180px]">
-      {data.map((d, i) => {
-        const total = d.cash + d.credit;
-        const h = (total / max) * 46;
-        const cashH = (d.cash / max) * 46;
-        const x = i * barW + barW * 0.15;
-        const w = barW * 0.7;
-        const y = 48 - h;
-        return (
-          <g key={i}>
-            <title>{`${d.label}\nCash Rs ${fmt0(d.cash)}\nCredit Rs ${fmt0(d.credit)}`}</title>
-            <rect x={x} y={48 - cashH} width={w} height={cashH} fill="var(--blue)" rx="0.6" />
-            <rect x={x} y={y} width={w} height={h - cashH} fill="var(--accent)" rx="0.6" />
-          </g>
-        );
-      })}
-    </svg>
+    <div>
+      <div className="flex" style={{ height: H }}>
+        {/* Y axis — numerical values */}
+        <div className="relative flex-shrink-0" style={{ width: AX }}>
+          {ticks.map((tk, i) => (
+            <span key={i} className="absolute right-2 text-[10px] mono -translate-y-1/2" style={{ top: `${(i / tickCount) * 100}%`, color: 'var(--text-faint)' }}>
+              {compact(tk)}
+            </span>
+          ))}
+        </div>
+        {/* Plot area with gridlines */}
+        <div className="relative flex-1 min-w-0">
+          {ticks.map((_, i) => (
+            <div key={i} className="absolute left-0 right-0" style={{ top: `${(i / tickCount) * 100}%`, borderTop: '1px dashed var(--border)' }} />
+          ))}
+          <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0 w-full h-full">
+            {data.map((d, i) => {
+              const total = d.cash + d.credit;
+              const h = (total / max) * 100;
+              const cashH = (d.cash / max) * 100;
+              const x = i * barW + barW * 0.15;
+              const w = barW * 0.7;
+              return (
+                <g key={i}>
+                  <title>{`${d.label}\nCash Rs ${fmt0(d.cash)}\nCredit Rs ${fmt0(d.credit)}`}</title>
+                  <rect x={x} y={100 - cashH} width={w} height={cashH} fill="var(--blue)" rx="0.6" />
+                  <rect x={x} y={100 - h} width={w} height={h - cashH} fill="var(--accent)" rx="0.6" />
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+      </div>
+      {/* X axis — dates */}
+      <div className="flex" style={{ marginLeft: AX }}>
+        {data.map((d, i) => (
+          <div key={i} className="text-[9.5px] mono text-center" style={{ width: `${barW}%`, color: 'var(--text-faint)', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+            {i % labelStep === 0 ? d.label.replace(/^\w+\s/, '') : ''}
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

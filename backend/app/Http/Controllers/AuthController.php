@@ -14,22 +14,26 @@ class AuthController extends Controller
     public function login(Request $request): JsonResponse
     {
         $credentials = $request->validate([
-            'email' => ['required', 'email'],
+            'username' => ['required', 'string'],
             'password' => ['required', 'string'],
         ]);
 
-        $user = User::query()->where('email', $credentials['email'])->first();
+        // Accept either the username or the email as the login identifier.
+        $user = User::query()
+            ->where('username', $credentials['username'])
+            ->orWhere('email', $credentials['username'])
+            ->first();
 
         if (! $user || ! Hash::check($credentials['password'], $user->password)) {
             throw ValidationException::withMessages([
-                'email' => __('auth.failed'),
+                'username' => __('auth.failed'),
             ]);
         }
 
         Auth::login($user, $request->boolean('remember'));
         $request->session()->regenerate();
 
-        return response()->json(['user' => $user->only('id', 'name', 'email')]);
+        return response()->json(['user' => self::payload($user)]);
     }
 
     public function logout(Request $request): JsonResponse
@@ -43,8 +47,18 @@ class AuthController extends Controller
 
     public function me(Request $request): JsonResponse
     {
-        return response()->json([
-            'user' => $request->user()->only('id', 'name', 'email'),
-        ]);
+        return response()->json(['user' => self::payload($request->user())]);
+    }
+
+    public static function payload(User $user): array
+    {
+        return [
+            'id' => $user->id,
+            'name' => $user->name,
+            'username' => $user->username,
+            'email' => $user->email,
+            'is_admin' => (bool) $user->is_admin,
+            'permissions' => $user->permissions ?? [],
+        ];
     }
 }

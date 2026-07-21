@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, X, Check, Wallet, Receipt, Clock, ReceiptText, Download } from 'lucide-react';
+import { Plus, X, Check, Wallet, Receipt, Clock, ReceiptText, Download, Edit2, Trash2 } from 'lucide-react';
 import { http, apiErrorMessage } from '@/lib/http';
 import { fmt, fmt0, compact, prettyDate } from '@/lib/format';
-import { toast } from '@/lib/toast';
+import { toast, confirmDelete } from '@/lib/toast';
 import { useSettings } from '@/store/settings';
 import { PageHead } from '@/components/PageHead';
 import { Button } from '@/components/ui/Button';
@@ -11,12 +11,14 @@ import { Badge, statusBadge } from '@/components/ui/Badge';
 import { SearchBar, Empty, Segmented, Stat } from '@/components/ui/Common';
 import { Modal } from '@/components/ui/Modal';
 import { Field, Select, MoneyInput, Input } from '@/components/ui/Field';
-import type { Customer, Invoice, Item } from '@/types';
+import type { Customer, Invoice, Item, ItemBatch } from '@/types';
 
 type Tab = 'all' | 'cash' | 'credit';
 
-interface DraftLine { item_id: number | ''; qty: string; price: string; }
-const blankLine = (): DraftLine => ({ item_id: '', qty: '1', price: '0' });
+interface DraftLine { item_id: number | ''; batch_id: number | ''; qty: string; price: string; }
+const blankLine = (): DraftLine => ({ item_id: '', batch_id: '', qty: '1', price: '0' });
+
+interface ChequeRow { no: string; date: string; amount: string; }
 
 export default function InvoicesPage() {
   const [rows, setRows] = useState<Invoice[]>([]);
@@ -24,6 +26,7 @@ export default function InvoicesPage() {
   const [tab, setTab] = useState<Tab>('all');
   const [params, setParams] = useSearchParams();
   const [create, setCreate] = useState(params.has('create'));
+  const [editInv, setEditInv] = useState<Invoice | null>(null);
   const [view, setView] = useState<Invoice | null>(null);
 
   const load = () => http.get('/api/invoices', { params: { q, type: tab === 'all' ? undefined : tab } }).then((r) => setRows(r.data.data));
@@ -58,7 +61,7 @@ export default function InvoicesPage() {
 
       <div className="card overflow-hidden">
         <table className="tbl">
-          <thead><tr><th>Invoice</th><th>Date</th><th>Customer</th><th>Type</th><th className="num">Total</th><th className="num">Balance</th><th>Status</th></tr></thead>
+          <thead><tr><th>Invoice</th><th>Date</th><th>Customer</th><th>Type</th><th className="num">Total</th><th className="num">Balance</th><th>Status</th><th></th></tr></thead>
           <tbody>
             {rows.map((inv) => {
               const st = statusBadge(inv.status);
@@ -72,6 +75,16 @@ export default function InvoicesPage() {
                   <td className="num money font-bold">{fmt(inv.total as number)}</td>
                   <td className="num money" style={{ color: bal > 0 ? 'var(--red)' : 'var(--text-faint)' }}>{bal > 0 ? fmt(bal) : '—'}</td>
                   <td><Badge kind={st.kind} dot>{st.label}</Badge></td>
+                  <td className="num" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex gap-1.5 justify-end">
+                      <Button variant="subtle" size="sm" icon={<Edit2 size={14} />} onClick={() => setEditInv(inv)} />
+                      <Button variant="subtle" size="sm" icon={<Trash2 size={14} />} onClick={async () => {
+                        if (!(await confirmDelete({ title: 'Delete invoice?', html: `Delete <b>${inv.no}</b>? Item stock will be restored${inv.type === 'credit' ? " and the customer's outstanding reversed" : ''}.` }))) return;
+                        try { await http.delete(`/api/invoices/${inv.id}`); toast('Invoice deleted'); void load(); }
+                        catch (e) { toast(apiErrorMessage(e), 'err'); }
+                      }} />
+                    </div>
+                  </td>
                 </tr>
               );
             })}
@@ -80,24 +93,58 @@ export default function InvoicesPage() {
         {rows.length === 0 && <Empty icon={<ReceiptText size={40} />} title="No invoices yet" sub="Create your first invoice to get started." />}
       </div>
 
-      {create && <CreateInvoice onClose={() => setCreate(false)} onSaved={() => { setCreate(false); void load(); }} />}
+      {(create || editInv) && (
+        <CreateInvoice
+          editInvoice={editInv}
+          onClose={() => { setCreate(false); setEditInv(null); }}
+          onSaved={() => { setCreate(false); setEditInv(null); void load(); }}
+        />
+      )}
       {view && <ViewInvoice inv={view} onClose={() => setView(null)} />}
     </div>
   );
 }
 
-function CreateInvoice({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoice | null; onClose: () => void; onSaved: () => void }) {
   const { settings } = useSettings();
   const taxDefault = Number(settings.tax_rate ?? 0);
+  const isEdit = !!editInvoice;
 
   const [type, setType] = useState<'cash' | 'credit'>('cash');
   const [customerId, setCustomerId] = useState<number | ''>('');
+  const [discCash, setDiscCash] = useState(false);
+  const [discCheque, setDiscCheque] = useState(false);
   const [lines, setLines] = useState<DraftLine[]>([blankLine()]);
   const [paid, setPaid] = useState('');
-  const [taxRate] = useState(taxDefault);
+  const [cheques, setCheques] = useState<ChequeRow[]>([]);
+  const [taxRate, setTaxRate] = useState(taxDefault);
+
+  // When editing, load the full invoice (lines + cheques) and pre-fill the form.
+  useEffect(() => {
+    if (!editInvoice) return;
+    void http.get(`/api/invoices/${editInvoice.id}`).then((r) => {
+      const d: Invoice = r.data.data;
+      setType(d.type);
+      setCustomerId(Number(d.customer_id));
+      setDiscCash(Number(d.cash_discount) > 0);
+      setDiscCheque(Number(d.cheque_discount) > 0);
+      setTaxRate(Number(d.tax_rate));
+      setLines((d.lines ?? []).map((l) => ({ item_id: Number(l.item_id), batch_id: l.batch_id ? Number(l.batch_id) : '', qty: String(Number(l.qty)), price: String(Number(l.price)) })));
+      (d.lines ?? []).forEach((l) => loadBatches(Number(l.item_id)));
+      setPaid(d.type === 'credit' ? String(Number(d.advance ?? d.paid)) : '');
+      setCheques((d.cheques ?? []).map((c) => ({ no: c.cheque_no ?? '', date: c.cheque_date ? String(c.cheque_date).slice(0, 10) : '', amount: String(Number(c.amount)) })));
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editInvoice]);
+
+  const addCheque = () => setCheques((cs) => [...cs, { no: '', date: '', amount: '' }]);
+  const delCheque = (i: number) => setCheques((cs) => cs.filter((_, idx) => idx !== i));
+  const setCheque = (i: number, patch: Partial<ChequeRow>) =>
+    setCheques((cs) => cs.map((c, idx) => (idx === i ? { ...c, ...patch } : c)));
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [items, setItems] = useState<Item[]>([]);
+  const [batchesByItem, setBatchesByItem] = useState<Record<number, ItemBatch[]>>({});
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -105,41 +152,59 @@ function CreateInvoice({ onClose, onSaved }: { onClose: () => void; onSaved: () 
     void http.get('/api/items').then((r) => setItems(r.data.data));
   }, []);
 
-  const totals = useMemo(() => {
-    const subtotal = lines.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.price) || 0), 0);
-    const taxAmt = (subtotal * taxRate) / 100;
-    const total = subtotal + taxAmt;
-    const paidNum = type === 'cash' ? total : Math.min(Number(paid) || 0, total);
-    const balance = total - paidNum;
-    return { subtotal, taxAmt, total, paidNum, balance };
-  }, [lines, taxRate, type, paid]);
+  const loadBatches = (itemId: number) => {
+    if (!itemId) return;
+    void http.get(`/api/items/${itemId}/batches`).then((r) => setBatchesByItem((m) => ({ ...m, [itemId]: r.data.data })));
+  };
+  const batchesFor = (l: DraftLine) => (l.item_id ? batchesByItem[Number(l.item_id)] ?? [] : []);
 
   const cust = customers.find((c) => c.id === customerId);
-  const newExposure = cust ? Number(cust.balance) + totals.balance : 0;
-  const overLimit = type === 'credit' && cust && newExposure > Number(cust.credit_limit);
+  const cashPct = cust ? Number(cust.cash_discount) : 0;
+  const chequePct = cust ? Number(cust.cheque_discount) : 0;
+
+  const totals = useMemo(() => {
+    const subtotal = lines.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.price) || 0), 0);
+    const cashAmt = (subtotal * (discCash ? cashPct : 0)) / 100;
+    const chequeAmt = (subtotal * (discCheque ? chequePct : 0)) / 100;
+    const discountAmt = cashAmt + chequeAmt;
+    const taxable = subtotal - discountAmt;
+    const taxAmt = (taxable * taxRate) / 100;
+    const total = taxable + taxAmt;
+    const paidNum = type === 'cash' ? total : Math.min(Number(paid) || 0, total);
+    const balance = total - paidNum;
+    return { subtotal, cashAmt, chequeAmt, discountAmt, taxable, taxAmt, total, paidNum, balance };
+  }, [lines, taxRate, type, paid, discCash, discCheque, cashPct, chequePct]);
 
   const setLine = (i: number, patch: Partial<DraftLine>) =>
     setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
   const pickItem = (i: number, id: number | '') => {
     const item = items.find((x) => x.id === id);
-    setLine(i, { item_id: id, price: item ? String(item.wholesale_price) : '0' });
+    setLine(i, { item_id: id, batch_id: '', price: item ? String(item.wholesale_price) : '0' });
+    if (id) loadBatches(Number(id));
   };
   const addLine = () => setLines((ls) => [...ls, blankLine()]);
   const delLine = (i: number) => setLines((ls) => (ls.length > 1 ? ls.filter((_, idx) => idx !== i) : ls));
 
-  const validLines = lines.filter((l) => l.item_id !== '' && Number(l.qty) > 0);
+  const validLines = lines.filter((l) => l.item_id !== '' && Number(l.qty) > 0 && (batchesFor(l).length === 0 || l.batch_id !== ''));
   const canSave = customerId !== '' && validLines.length > 0 && !busy;
 
   const save = async () => {
     if (!canSave) return;
     setBusy(true);
     try {
-      await http.post('/api/invoices', {
-        type, customer_id: customerId, tax_rate: taxRate,
+      const payload = {
+        type, customer_id: customerId, tax_rate: taxRate, cash_discount: discCash, cheque_discount: discCheque,
         paid: type === 'cash' ? totals.total : Number(paid) || 0,
-        lines: validLines.map((l) => ({ item_id: l.item_id, qty: Number(l.qty), price: Number(l.price) })),
-      });
-      toast('Invoice created');
+        lines: validLines.map((l) => ({ item_id: l.item_id, batch_id: l.batch_id || null, qty: Number(l.qty), price: Number(l.price) })),
+        cheques: type === 'credit'
+          ? cheques
+              .filter((c) => c.no.trim() || c.date || Number(c.amount) > 0)
+              .map((c) => ({ no: c.no.trim() || null, date: c.date || null, amount: Number(c.amount) || 0 }))
+          : [],
+      };
+      if (isEdit) await http.put(`/api/invoices/${editInvoice!.id}`, payload);
+      else await http.post('/api/invoices', payload);
+      toast(isEdit ? 'Invoice updated' : 'Invoice created');
       onSaved();
     } catch (e) { toast(apiErrorMessage(e), 'err'); }
     finally { setBusy(false); }
@@ -148,7 +213,7 @@ function CreateInvoice({ onClose, onSaved }: { onClose: () => void; onSaved: () 
   return (
     <Modal
       lg
-      title="Create Invoice"
+      title={isEdit ? `Edit Invoice ${editInvoice!.no}` : 'Create Invoice'}
       onClose={onClose}
       footer={
         <>
@@ -157,7 +222,7 @@ function CreateInvoice({ onClose, onSaved }: { onClose: () => void; onSaved: () 
             <span className="text-[20px] font-extrabold mono">Rs {fmt(totals.total)}</span>
           </div>
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button variant="primary" disabled={!canSave} onClick={save}>Create {type === 'cash' ? 'Cash' : 'Credit'} Invoice</Button>
+          <Button variant="primary" disabled={!canSave} onClick={save}>{isEdit ? 'Save changes' : `Create ${type === 'cash' ? 'Cash' : 'Credit'} Invoice`}</Button>
         </>
       }
     >
@@ -168,29 +233,20 @@ function CreateInvoice({ onClose, onSaved }: { onClose: () => void; onSaved: () 
         </div>
       </div>
 
-      <div className="mb-5">
+      <div className="grid grid-cols-2 gap-4 mb-5">
         <Field label="Customer" req hint="Who is buying">
-          <Select value={customerId === '' ? '' : String(customerId)} onChange={(e) => setCustomerId(e.target.value ? Number(e.target.value) : '')}>
+          <Select value={customerId === '' ? '' : String(customerId)} onChange={(e) => { setCustomerId(e.target.value ? Number(e.target.value) : ''); setDiscCash(false); setDiscCheque(false); }}>
             <option value="">Select customer…</option>
             {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </Select>
         </Field>
-      </div>
-
-      {type === 'credit' && cust && (
-        <div className="flex items-center gap-3.5 p-3 rounded-[10px] mb-5"
-             style={{ background: overLimit ? 'var(--red-soft)' : 'var(--surface-2)', border: `1px solid ${overLimit ? 'var(--red)' : 'var(--border)'}` }}>
-          <Wallet size={18} style={{ color: overLimit ? 'var(--red)' : 'var(--text-muted)' }} />
-          <div className="flex-1 text-[12.5px]">
-            <div className="flex justify-between mb-1">
-              <span className="font-semibold">Credit exposure after this invoice</span>
-              <span className="mono">Rs {fmt0(newExposure)} / {fmt0(cust.credit_limit as number)}</span>
-            </div>
-            <div className="bar"><span style={{ width: `${Math.min(100, (newExposure / (Number(cust.credit_limit) || 1)) * 100)}%`, background: overLimit ? 'var(--red)' : 'var(--accent)' }} /></div>
+        <Field label="Discount" hint="Tick to apply the customer's cash and / or cheque discount.">
+          <div className="flex flex-col gap-2 pt-1.5">
+            <DiscountTick label="Cash discount" pct={cashPct} on={discCash} disabled={!cust || cashPct <= 0} onToggle={() => setDiscCash((v) => !v)} />
+            <DiscountTick label="Cheque discount" pct={chequePct} on={discCheque} disabled={!cust || chequePct <= 0} onToggle={() => setDiscCheque((v) => !v)} />
           </div>
-          {overLimit && <Badge kind="red">Over limit</Badge>}
-        </div>
-      )}
+        </Field>
+      </div>
 
       <div className="text-[13px] font-semibold mb-2" style={{ color: 'var(--text-muted)' }}>Items</div>
       <div className="card p-2.5 mb-4">
@@ -218,6 +274,12 @@ function CreateInvoice({ onClose, onSaved }: { onClose: () => void; onSaved: () 
                         </option>
                       ))}
                     </Select>
+                    {batchesFor(l).length > 0 && (
+                      <Select value={l.batch_id === '' ? '' : String(l.batch_id)} onChange={(e) => setLine(i, { batch_id: e.target.value ? Number(e.target.value) : '' })} style={{ height: 32, fontSize: 12, marginTop: 6 }}>
+                        <option value="">Select cost-batch…</option>
+                        {batchesFor(l).map((b) => <option key={b.id} value={b.id}>Cost Rs {fmt(b.unit_cost as number)} · {b.qty_remaining} left</option>)}
+                      </Select>
+                    )}
                     {it && <div className="text-[12px] mt-1" style={{ color: 'var(--text-muted)' }}>Stock: {fmt0(it.stock)} · WP Rs {fmt(it.wholesale_price as number)}</div>}
                   </td>
                   <td className="p-1.5"><Input className="mono text-right" value={l.qty} onChange={(e) => setLine(i, { qty: e.target.value.replace(/\D/g, '') })} style={{ height: 36 }} /></td>
@@ -246,9 +308,37 @@ function CreateInvoice({ onClose, onSaved }: { onClose: () => void; onSaved: () 
               <Check size={16} style={{ color: 'var(--green)' }} /> Full amount collected at point of sale — marked Paid.
             </div>
           )}
+
+          {type === 'credit' && (
+          <div className="mt-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-[13px] font-semibold" style={{ color: 'var(--text-muted)' }}>Cheque details</div>
+              <Button variant="subtle" size="sm" icon={<Plus size={13} />} onClick={addCheque}>Add cheque</Button>
+            </div>
+            {cheques.length === 0 ? (
+              <div className="text-[12px]" style={{ color: 'var(--text-faint)' }}>No cheques. Use “Add cheque” to record cheque no., date and value.</div>
+            ) : (
+              <div className="flex flex-col gap-1.5">
+                {cheques.map((c, i) => (
+                  <div key={i} className="flex gap-1.5 items-center">
+                    <Input placeholder="Cheque no." value={c.no} onChange={(e) => setCheque(i, { no: e.target.value })} className="mono" style={{ height: 34, flex: 1, minWidth: 0 }} />
+                    <Input type="date" value={c.date} onChange={(e) => setCheque(i, { date: e.target.value })} style={{ height: 34, width: 140 }} />
+                    <Input placeholder="0.00" inputMode="decimal" value={c.amount} onChange={(e) => setCheque(i, { amount: e.target.value.replace(/[^\d.]/g, '') })} className="mono text-right" style={{ height: 34, width: 96 }} />
+                    <button type="button" className="grid place-items-center w-7 h-7 rounded-md hover:bg-surface-2 flex-shrink-0" onClick={() => delCheque(i)}><X size={14} /></button>
+                  </div>
+                ))}
+                <div className="text-[11.5px] mt-0.5" style={{ color: 'var(--text-faint)' }}>
+                  Recorded for reference — does not change the amount paid. Total cheques: Rs {fmt(cheques.reduce((s, c) => s + (Number(c.amount) || 0), 0))}
+                </div>
+              </div>
+            )}
+          </div>
+          )}
         </div>
         <div className="rounded-[10px] p-4" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
           <TotalRow k="Subtotal" v={fmt(totals.subtotal)} />
+          {totals.cashAmt > 0 && <TotalRow k={`Cash discount (${cashPct}%)`} v={`-${fmt(totals.cashAmt)}`} />}
+          {totals.chequeAmt > 0 && <TotalRow k={`Cheque discount (${chequePct}%)`} v={`-${fmt(totals.chequeAmt)}`} />}
           <TotalRow k={`Tax / VAT (${taxRate}%)`} v={fmt(totals.taxAmt)} />
           <div className="h-px my-2.5" style={{ background: 'var(--border)' }} />
           <TotalRow k="Total" v={fmt(totals.total)} big />
@@ -259,6 +349,29 @@ function CreateInvoice({ onClose, onSaved }: { onClose: () => void; onSaved: () 
         </div>
       </div>
     </Modal>
+  );
+}
+
+function DiscountTick({ label, pct, on, disabled, onToggle }: {
+  label: string; pct: number; on: boolean; disabled?: boolean; onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      disabled={disabled}
+      className="flex items-center gap-2.5 text-left disabled:opacity-45 disabled:cursor-not-allowed"
+    >
+      <span
+        className="grid place-items-center w-[18px] h-[18px] rounded-[5px] border flex-shrink-0 transition"
+        style={{ background: on ? 'var(--accent)' : 'var(--surface)', borderColor: on ? 'var(--accent)' : 'var(--border-strong)' }}
+      >
+        {on && <Check size={13} color="white" strokeWidth={3} />}
+      </span>
+      <span className="text-[13.5px]">
+        {label} <span className="mono font-semibold" style={{ color: 'var(--text-muted)' }}>({pct}%)</span>
+      </span>
+    </button>
   );
 }
 
@@ -310,9 +423,31 @@ function ViewInvoice({ inv, onClose }: { inv: Invoice; onClose: () => void }) {
         </table>
       </div>
 
+      {(data.cheques ?? []).length > 0 && (
+        <div className="mb-4">
+          <div className="text-[13px] font-semibold mb-2" style={{ color: 'var(--text-muted)' }}>Cheques</div>
+          <div className="card overflow-hidden">
+            <table className="tbl">
+              <thead><tr><th>Cheque No</th><th>Date</th><th className="num">Amount</th></tr></thead>
+              <tbody>
+                {(data.cheques ?? []).map((c, i) => (
+                  <tr key={i}>
+                    <td className="mono font-semibold">{c.cheque_no || '—'}</td>
+                    <td>{c.cheque_date ? prettyDate(c.cheque_date) : '—'}</td>
+                    <td className="num money">{fmt(c.amount as number)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       <div className="flex justify-end">
         <div className="w-[280px] rounded-[10px] p-4" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
           <TotalRow k="Subtotal" v={fmt(data.subtotal as number)} />
+          {Number(data.cash_discount) > 0 && <TotalRow k={`Cash discount (${data.cash_discount}%)`} v={`-${fmt(Number(data.subtotal) * Number(data.cash_discount) / 100)}`} />}
+          {Number(data.cheque_discount) > 0 && <TotalRow k={`Cheque discount (${data.cheque_discount}%)`} v={`-${fmt(Number(data.subtotal) * Number(data.cheque_discount) / 100)}`} />}
           <TotalRow k={`Tax (${data.tax_rate}%)`} v={fmt(data.tax_amount as number)} />
           <div className="h-px my-2" style={{ background: 'var(--border)' }} />
           <TotalRow k="Total" v={fmt(data.total as number)} big />

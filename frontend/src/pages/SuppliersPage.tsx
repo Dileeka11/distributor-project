@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react';
 import { Plus, Edit2, Trash2, Truck } from 'lucide-react';
 import { http, apiErrorMessage } from '@/lib/http';
 import { fmt0 } from '@/lib/format';
-import { toast } from '@/lib/toast';
+import { toast, confirmDelete } from '@/lib/toast';
 import { PageHead } from '@/components/PageHead';
 import { Button } from '@/components/ui/Button';
-import { SearchBar, Empty } from '@/components/ui/Common';
-import { Modal, Confirm } from '@/components/ui/Modal';
+import { Empty } from '@/components/ui/Common';
+import { SearchSelect } from '@/components/ui/SearchSelect';
+import { Modal } from '@/components/ui/Modal';
 import { Field, Input, Textarea } from '@/components/ui/Field';
 import type { Supplier } from '@/types';
 
@@ -21,13 +22,13 @@ const nextSupplierCode = (rows: Supplier[]): string => {
 
 export default function SuppliersPage() {
   const [rows, setRows] = useState<Supplier[]>([]);
-  const [q, setQ] = useState('');
+  const [supplierId, setSupplierId] = useState<number | ''>('');
   const [editing, setEditing] = useState<Supplier | 'new' | null>(null);
-  const [deleting, setDeleting] = useState<Supplier | null>(null);
 
-  const load = () => http.get('/api/suppliers', { params: { q } }).then((r) => setRows(r.data.data));
-  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [q]);
+  const load = () => http.get('/api/suppliers').then((r) => setRows(r.data.data));
+  useEffect(() => { void load(); }, []);
 
+  const filtered = supplierId === '' ? rows : rows.filter((s) => Number(s.id) === supplierId);
   const totalPayable = rows.reduce((s, r) => s + Number(r.payable), 0);
 
   return (
@@ -38,14 +39,14 @@ export default function SuppliersPage() {
         actions={<Button variant="primary" icon={<Plus size={16} />} onClick={() => setEditing('new')}>Add Supplier</Button>}
       />
       <div className="flex gap-2.5 mb-4 flex-wrap">
-        <SearchBar value={q} onChange={setQ} placeholder="Search suppliers…" />
+        <SearchSelect items={rows} value={supplierId} onChange={setSupplierId} allLabel="All suppliers" placeholder="Search name, code or mobile…" width={300} subtitle={(s) => `${s.code}${s.phone ? ` · ${s.phone}` : ''}`} />
       </div>
 
       <div className="card overflow-hidden">
         <table className="tbl">
           <thead><tr><th>Code</th><th>Supplier</th><th>Contact</th><th>Terms</th><th className="num">Payable</th><th></th></tr></thead>
           <tbody>
-            {rows.map((s) => (
+            {filtered.map((s) => (
               <tr key={s.id}>
                 <td className="mono font-semibold">{s.code}</td>
                 <td>
@@ -70,14 +71,18 @@ export default function SuppliersPage() {
                 <td className="num">
                   <div className="flex gap-1.5 justify-end">
                     <Button variant="subtle" size="sm" icon={<Edit2 size={14} />} onClick={() => setEditing(s)} />
-                    <Button variant="subtle" size="sm" icon={<Trash2 size={14} />} onClick={() => setDeleting(s)} />
+                    <Button variant="subtle" size="sm" icon={<Trash2 size={14} />} onClick={async () => {
+                      if (!(await confirmDelete({ title: 'Delete supplier?', html: `Remove <b>${s.name}</b>?` }))) return;
+                      try { await http.delete(`/api/suppliers/${s.id}`); toast('Supplier deleted'); void load(); }
+                      catch (e) { toast(apiErrorMessage(e), 'err'); }
+                    }} />
                   </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
-        {rows.length === 0 && <Empty icon={<Truck size={40} />} title="No suppliers found" />}
+        {filtered.length === 0 && <Empty icon={<Truck size={40} />} title="No suppliers found" />}
       </div>
 
       {editing && (
@@ -86,17 +91,6 @@ export default function SuppliersPage() {
           nextCode={nextSupplierCode(rows)}
           onClose={() => setEditing(null)}
           onSaved={() => { setEditing(null); void load(); }}
-        />
-      )}
-      {deleting && (
-        <Confirm
-          title="Delete supplier?" danger confirmLabel="Delete"
-          message={<>Remove <strong>{deleting.name}</strong>?</>}
-          onClose={() => setDeleting(null)}
-          onConfirm={async () => {
-            try { await http.delete(`/api/suppliers/${deleting.id}`); toast('Supplier deleted'); void load(); }
-            catch (e) { toast(apiErrorMessage(e), 'err'); }
-          }}
         />
       )}
     </div>
