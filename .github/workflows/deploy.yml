@@ -27,21 +27,9 @@ jobs:
           npm install --no-audit --no-fund
           npm run build
 
-      # ---------- BACKEND (Laravel) dependencies ----------
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.2'
-
-      - name: Install backend dependencies
-        working-directory: backend
-        run: |
-          cp .env.example .env
-          touch database/database.sqlite
-          composer install --no-dev --optimize-autoloader --no-interaction
-
-      # ---------- Deploy BACKEND via FTP ----------
-      # server එකේ .env, storage, vendor-cache වගේ දේවල් overwrite/delete වෙන්නේ නෑ (exclude කරලා)
+      # ---------- Deploy BACKEND (Laravel) via FTPS ----------
+      # vendor එක server එකේ දැනටමත් තියෙනවා -> exclude කරලා (packages වෙනස් වුණාම විතරයි නැවත ඕන)
+      # .env, storage overwrite/delete වෙන්නේ නෑ
       - name: Deploy backend
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
@@ -49,20 +37,20 @@ jobs:
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
           protocol: ftps
+          timeout: 120000
           local-dir: ./backend/
           server-dir: /backend/
           exclude: |
             **/.git*
             **/.git*/**
             **/node_modules/**
+            vendor/**
             .env
             .env.*
             storage/**
-            database/database.sqlite
             artisan.zip
 
-      # ---------- Deploy FRONTEND via FTP ----------
-      # frontend/dist එකේ content එක server frontend/ එකට යනවා
+      # ---------- Deploy FRONTEND (built dist) via FTPS ----------
       - name: Deploy frontend
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
@@ -70,6 +58,7 @@ jobs:
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
           protocol: ftps
+          timeout: 120000
           local-dir: ./frontend/dist/
           server-dir: /frontend/
           exclude: |
