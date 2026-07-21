@@ -48,7 +48,7 @@ jobs:
           server: ${{ secrets.FTP_HOST }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
-          protocol: ftp          # SSL/TLS නම් 'ftps' කරන්න
+          protocol: ftps
           local-dir: ./backend/
           server-dir: /backend/
           exclude: |
@@ -69,7 +69,7 @@ jobs:
           server: ${{ secrets.FTP_HOST }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
-          protocol: ftp
+          protocol: ftps
           local-dir: ./frontend/dist/
           server-dir: /frontend/
           exclude: |
