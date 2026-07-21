@@ -13,6 +13,7 @@ use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\ItemController;
 use App\Http\Controllers\JobRoleController;
 use App\Http\Controllers\PayrollController;
+use App\Http\Controllers\ProductController;
 use App\Http\Controllers\SettingController;
 use App\Http\Controllers\SettlementController;
 use App\Http\Controllers\SupplierController;
@@ -42,6 +43,11 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/items/{item}/batches', [ItemController::class, 'batches']);
     Route::apiResource('items', ItemController::class)->only(['index', 'store', 'update', 'destroy']);
+
+    Route::get('/products', [ProductController::class, 'index']);
+    Route::post('/products', [ProductController::class, 'store']);
+    Route::post('/products/{product}/assemble', [ProductController::class, 'assemble']);
+    Route::delete('/products/{product}', [ProductController::class, 'destroy']);
     Route::apiResource('suppliers', SupplierController::class)->only(['index', 'store', 'update', 'destroy']);
     Route::apiResource('customers', CustomerController::class)->only(['index', 'store', 'update', 'destroy']);
 

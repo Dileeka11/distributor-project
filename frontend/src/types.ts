@@ -12,6 +12,29 @@ export interface Item {
   wholesale_price: string | number;
   retail_price: string | number;
   stock: number;
+  // Present when this item is a composite product built from other items.
+  product?: { id: ID; item_id: ID; actual_price: string | number; selling_price: string | number } | null;
+}
+
+export interface ProductComponent {
+  id: ID;
+  product_id: ID;
+  item_id: ID;
+  item?: Item;
+  name: string; // snapshot
+  qty: string | number;
+  price: string | number;
+  total: string | number;
+}
+
+// A sellable item built by combining other items (recipe + pricing).
+export interface Product {
+  id: ID;
+  item_id: ID;
+  item?: Item;
+  actual_price: string | number;  // per-unit component total
+  selling_price: string | number;
+  components?: ProductComponent[];
 }
 
 export interface Party {

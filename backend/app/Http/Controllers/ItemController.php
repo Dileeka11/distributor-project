@@ -25,7 +25,7 @@ class ItemController extends Controller
         $category = (int) $request->input('category_id');
 
         $items = Item::query()
-            ->with('category:id,name')
+            ->with(['category:id,name', 'product:id,item_id,actual_price,selling_price'])
             ->when($q !== '', fn ($qb) => $qb->where(function ($w) use ($q) {
                 $w->where('name', 'like', "%{$q}%")->orWhere('code', 'like', "%{$q}%");
             }))

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { LayoutDashboard, Package, Truck, Users, ReceiptText, PackageOpen, Scale, FileBarChart2, UserCog, CalendarCheck, Wallet, ShieldCheck, ChevronDown, Settings as SettingsIcon, LogOut } from 'lucide-react';
+import { LayoutDashboard, Package, Boxes, Truck, Users, ReceiptText, PackageOpen, Scale, FileBarChart2, UserCog, CalendarCheck, Wallet, ShieldCheck, ChevronDown, Settings as SettingsIcon, LogOut } from 'lucide-react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '@/store/auth';
 import { useSettings } from '@/store/settings';
@@ -10,6 +10,7 @@ interface NavEntry { to: string; label: string; icon: typeof LayoutDashboard; en
 const NAV: NavEntry[] = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true, group: 'Overview', perm: 'dashboard' },
   { to: '/items', label: 'Items', icon: Package, group: 'Masters', perm: 'items' },
+  { to: '/products', label: 'Products', icon: Boxes, group: 'Masters', perm: 'products' },
   { to: '/suppliers', label: 'Suppliers', icon: Truck, group: 'Masters', perm: 'suppliers' },
   { to: '/customers', label: 'Customers', icon: Users, group: 'Masters', perm: 'customers' },
   { to: '/employees', label: 'Employees', icon: UserCog, group: 'Masters', perm: 'employees' },

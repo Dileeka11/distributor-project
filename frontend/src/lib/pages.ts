@@ -6,6 +6,7 @@ export interface PageDef { key: string; label: string; to: string; group: string
 export const PAGES: PageDef[] = [
   { key: 'dashboard', label: 'Dashboard', to: '/', group: 'Overview' },
   { key: 'items', label: 'Items', to: '/items', group: 'Masters' },
+  { key: 'products', label: 'Products', to: '/products', group: 'Masters' },
   { key: 'suppliers', label: 'Suppliers', to: '/suppliers', group: 'Masters' },
   { key: 'customers', label: 'Customers', to: '/customers', group: 'Masters' },
   { key: 'employees', label: 'Employees', to: '/employees', group: 'Masters' },

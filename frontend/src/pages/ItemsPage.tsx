@@ -212,7 +212,7 @@ function ItemModal({
           <Input value={f.code} disabled={!isNew} onChange={(e) => setF({ ...f, code: e.target.value })} placeholder="e.g. AA0012" className={`mono${dup ? '' : ''}`} style={dup ? { borderColor: 'var(--red)' } : undefined} />
         </Field>
         <Field label="Name" req>
-          <Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="e.g. Paracetamol 500mg" />
+          <Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="Item name" />
         </Field>
         <Field label="Category" full hint="Use + to add, edit or remove categories.">
           <div className="flex gap-2">

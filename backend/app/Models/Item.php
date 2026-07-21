@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Item extends Model
 {
@@ -31,5 +32,11 @@ class Item extends Model
     public function batches(): HasMany
     {
         return $this->hasMany(ItemBatch::class);
+    }
+
+    /** Set when this item is a composite product built from other items. */
+    public function product(): HasOne
+    {
+        return $this->hasOne(Product::class);
     }
 }

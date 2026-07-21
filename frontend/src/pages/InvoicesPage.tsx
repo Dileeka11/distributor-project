@@ -280,7 +280,13 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
                         {batchesFor(l).map((b) => <option key={b.id} value={b.id}>Cost Rs {fmt(b.unit_cost as number)} · {b.qty_remaining} left</option>)}
                       </Select>
                     )}
-                    {it && <div className="text-[12px] mt-1" style={{ color: 'var(--text-muted)' }}>Stock: {fmt0(it.stock)} · WP Rs {fmt(it.wholesale_price as number)}</div>}
+                    {it && (
+                      <div className="text-[12px] mt-1" style={{ color: 'var(--text-muted)' }}>
+                        Stock: {fmt0(it.stock)} · {it.product
+                          ? <>Actual Rs {fmt(Number(it.product.actual_price))}</>
+                          : <>WP Rs {fmt(it.wholesale_price as number)}</>}
+                      </div>
+                    )}
                   </td>
                   <td className="p-1.5"><Input className="mono text-right" value={l.qty} onChange={(e) => setLine(i, { qty: e.target.value.replace(/\D/g, '') })} style={{ height: 36 }} /></td>
                   <td className="p-1.5"><Input className="mono text-right" value={l.price} onChange={(e) => setLine(i, { price: e.target.value.replace(/[^\d.]/g, '') })} style={{ height: 36 }} /></td>

@@ -7,6 +7,7 @@ import { AppShell } from '@/components/AppShell';
 import LoginPage from '@/pages/LoginPage';
 import DashboardPage from '@/pages/DashboardPage';
 import ItemsPage from '@/pages/ItemsPage';
+import ProductsPage from '@/pages/ProductsPage';
 import SuppliersPage from '@/pages/SuppliersPage';
 import CustomersPage from '@/pages/CustomersPage';
 import InvoicesPage from '@/pages/InvoicesPage';
@@ -54,6 +55,7 @@ export default function App() {
       <Route element={<AppShell />}>
         <Route index element={<Guard perm="dashboard"><DashboardPage /></Guard>} />
         <Route path="items" element={<Guard perm="items"><ItemsPage /></Guard>} />
+        <Route path="products" element={<Guard perm="products"><ProductsPage /></Guard>} />
         <Route path="suppliers" element={<Guard perm="suppliers"><SuppliersPage /></Guard>} />
         <Route path="customers" element={<Guard perm="customers"><CustomersPage /></Guard>} />
         <Route path="employees" element={<Guard perm="employees"><EmployeesPage /></Guard>} />
