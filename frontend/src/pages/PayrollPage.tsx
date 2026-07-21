@@ -44,7 +44,7 @@ export default function PayrollPage() {
   );
 
   const filtered = rows.filter((p) =>
-    (monthFilter === 'All' || p.month === monthFilter)
+    (monthFilter === 'All' || Number(p.month) === monthFilter)
     && (roleFilter === 'All' || p.employee?.role === roleFilter)
     && (employeeId === '' || Number(p.employee_id) === employeeId),
   );

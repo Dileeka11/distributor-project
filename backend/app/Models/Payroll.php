@@ -13,6 +13,12 @@ class Payroll extends Model
     ];
 
     protected $casts = [
+        // PHP < 8.1 returns numeric DB columns as strings; cast so the JSON
+        // always carries real integers (the UI filters by employee_id/month).
+        'employee_id' => 'integer',
+        'month' => 'integer',
+        'year' => 'integer',
+        'days_worked' => 'integer',
         'total_hours' => 'decimal:2',
         'ot_hours' => 'decimal:2',
         'basic_salary' => 'decimal:2',

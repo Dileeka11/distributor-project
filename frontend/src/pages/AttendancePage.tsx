@@ -38,7 +38,8 @@ export default function AttendancePage() {
   useEffect(() => { void loadRecords(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [date]);
 
   const isToday = date === today;
-  const recFor = (id: number) => records.find((r) => r.employee_id === id);
+  // Number() both sides: older PHP/MySQL stacks serialize ids as strings.
+  const recFor = (id: number) => records.find((r) => Number(r.employee_id) === id);
 
   // Role dropdown narrows the employee list; the employee dropdown then filters to one.
   const roleEmployees = employees.filter((e) => roleFilter === 'All' || e.role === roleFilter);
@@ -52,7 +53,13 @@ export default function AttendancePage() {
       const { data } = await http.post('/api/attendance/clock', {
         employee_id: emp.id, date: d.toLocaleDateString('en-CA'), time,
       });
-      toast(data.data.clock_out ? `${emp.name} clocked out` : `${emp.name} clocked in`);
+      const saved = data.data as Attendance;
+      toast(saved.clock_out ? `${emp.name} clocked out` : `${emp.name} clocked in`);
+      // Show the saved row immediately from the response, then refresh the list.
+      setRecords((rs) => {
+        const rest = rs.filter((r) => Number(r.employee_id) !== Number(saved.employee_id));
+        return [saved, ...rest];
+      });
       void loadRecords();
     } catch (e) { toast(apiErrorMessage(e), 'err'); }
   };
@@ -199,7 +206,7 @@ function AttendanceReportModal({ onClose }: { onClose: () => void }) {
     [employees, role],
   );
   useEffect(() => {
-    if (employeeId && !roleEmployees.some((e) => e.id === employeeId)) setEmployeeId('');
+    if (employeeId && !roleEmployees.some((e) => Number(e.id) === employeeId)) setEmployeeId('');
   }, [roleEmployees, employeeId]);
 
   const byDate = useMemo(() => {
@@ -217,7 +224,7 @@ function AttendanceReportModal({ onClose }: { onClose: () => void }) {
 
   const totalHours = tableRows.reduce((s, r) => s + Number(r.total_hours), 0);
   const presentDays = tableRows.filter((r) => r.status !== 'absent' && r.clock_in).length;
-  const emp = employees.find((e) => e.id === employeeId);
+  const emp = employees.find((e) => Number(e.id) === employeeId);
 
   return (
     <Modal lg title="Attendance report" onClose={onClose}>
@@ -297,7 +304,7 @@ function EmployeePicker({ employees, value, onChange, allLabel, width }: {
     return () => document.removeEventListener('mousedown', onDoc);
   }, [open]);
 
-  const selected = employees.find((e) => e.id === value);
+  const selected = employees.find((e) => Number(e.id) === value);
   const ql = q.trim().toLowerCase();
   const filtered = ql
     ? employees.filter((e) => e.name.toLowerCase().includes(ql) || e.code.toLowerCase().includes(ql) || String(e.phone ?? '').toLowerCase().includes(ql))
@@ -323,7 +330,7 @@ function EmployeePicker({ employees, value, onChange, allLabel, width }: {
               <button type="button" onClick={() => pick('')} className="w-full text-left px-3 py-2 text-[13px] hover:bg-surface-2" style={{ fontWeight: value === '' ? 700 : 400, background: value === '' ? 'var(--surface-2)' : undefined }}>{allLabel}</button>
             )}
             {filtered.map((e) => (
-              <button key={e.id} type="button" onClick={() => pick(Number(e.id))} className="w-full text-left px-3 py-2 hover:bg-surface-2" style={{ background: e.id === value ? 'var(--surface-2)' : undefined }}>
+              <button key={e.id} type="button" onClick={() => pick(Number(e.id))} className="w-full text-left px-3 py-2 hover:bg-surface-2" style={{ background: Number(e.id) === value ? 'var(--surface-2)' : undefined }}>
                 <div className="text-[13px] font-medium">{e.name}</div>
                 <div className="text-[11.5px] mono" style={{ color: 'var(--text-muted)' }}>{e.code}{e.role ? ` · ${e.role}` : ''}</div>
               </button>

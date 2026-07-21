@@ -10,6 +10,9 @@ class Attendance extends Model
     protected $fillable = ['employee_id', 'date', 'clock_in', 'clock_out', 'total_hours', 'status'];
 
     protected $casts = [
+        // PHP < 8.1 returns numeric DB columns as strings; cast so the JSON
+        // always carries a real integer (the UI matches rows by employee_id).
+        'employee_id' => 'integer',
         'date' => 'date',
         'total_hours' => 'decimal:2',
     ];
