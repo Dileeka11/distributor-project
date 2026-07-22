@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Customer;
 use App\Models\Grn;
 use App\Models\Invoice;
+use App\Models\Settlement;
 use App\Models\Supplier;
 
 /**
@@ -68,9 +69,12 @@ class SettlementService
 
     public function reverseReceivable(Customer $customer, array $applied): void
     {
+        $restore = (float) ($applied['balance'] ?? 0);
         foreach (($applied['invoices'] ?? []) as $id => $amt) {
             $inv = Invoice::query()->find($id);
             if (! $inv) {
+                // Invoice deleted since — its share has no outstanding to return to.
+                $restore = round($restore - (float) $amt, 2);
                 continue;
             }
             $newPaid = round((float) $inv->paid - (float) $amt, 2);
@@ -80,8 +84,8 @@ class SettlementService
             ]);
         }
 
-        if (! empty($applied['balance'])) {
-            $customer->increment('balance', (float) $applied['balance']);
+        if ($restore > 0) {
+            $customer->increment('balance', $restore);
         }
         if (! empty($applied['opening'])) {
             $customer->increment('credit_limit', (float) $applied['opening']);
@@ -130,9 +134,12 @@ class SettlementService
 
     public function reversePayable(Supplier $supplier, array $applied): void
     {
+        $restore = (float) ($applied['payable'] ?? 0);
         foreach (($applied['grns'] ?? []) as $id => $amt) {
             $g = Grn::query()->find($id);
             if (! $g) {
+                // GRN deleted since — its share has no outstanding to return to.
+                $restore = round($restore - (float) $amt, 2);
                 continue;
             }
             $newPaid = round((float) $g->paid - (float) $amt, 2);
@@ -142,8 +149,93 @@ class SettlementService
             ]);
         }
 
-        if (! empty($applied['payable'])) {
-            $supplier->increment('payable', (float) $applied['payable']);
+        if ($restore > 0) {
+            $supplier->increment('payable', $restore);
+        }
+    }
+
+    /**
+     * Undo everything a settlement posted: cheque settlements reverse each
+     * cleared cheque from its own snapshot; cash-like settlements reverse the
+     * settlement snapshot.
+     */
+    public function reverseSettlementPosting(Settlement $settlement): void
+    {
+        $settlement->loadMissing('cheques');
+
+        if ($settlement->mode === 'Cheque') {
+            foreach ($settlement->cheques as $cheque) {
+                if ($cheque->cleared_at && is_array($cheque->applied)) {
+                    $this->reverseSnapshot($settlement, $cheque->applied);
+                }
+            }
+        } elseif (is_array($settlement->applied)) {
+            $this->reverseSnapshot($settlement, $settlement->applied);
+        }
+    }
+
+    /**
+     * A GRN is being deleted: reverse and remove every payment (settlement)
+     * that was applied to it, so no orphaned transactions stay in history.
+     */
+    public function purgeSettlementsForGrn(Grn $grn): void
+    {
+        Settlement::query()
+            ->where('side', 'payable')
+            ->where('supplier_id', $grn->supplier_id)
+            ->with('cheques')
+            ->lockForUpdate()
+            ->get()
+            ->each(function (Settlement $s) use ($grn) {
+                if (! $this->snapshotTouches($s, 'grns', (int) $grn->id)) {
+                    return;
+                }
+                $this->reverseSettlementPosting($s);
+                $s->delete(); // cheques cascade
+            });
+    }
+
+    /** Same cleanup for the customer side when an invoice is deleted. */
+    public function purgeSettlementsForInvoice(Invoice $invoice): void
+    {
+        Settlement::query()
+            ->where('side', 'receivable')
+            ->where('customer_id', $invoice->customer_id)
+            ->with('cheques')
+            ->lockForUpdate()
+            ->get()
+            ->each(function (Settlement $s) use ($invoice) {
+                if (! $this->snapshotTouches($s, 'invoices', (int) $invoice->id)) {
+                    return;
+                }
+                $this->reverseSettlementPosting($s);
+                $s->delete(); // cheques cascade
+            });
+    }
+
+    /** Did this settlement (or any of its cleared cheques) apply to the given row? */
+    private function snapshotTouches(Settlement $s, string $key, int $id): bool
+    {
+        if (is_array($s->applied) && isset($s->applied[$key][$id])) {
+            return true;
+        }
+        foreach ($s->cheques as $c) {
+            if (is_array($c->applied) && isset($c->applied[$key][$id])) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function reverseSnapshot(Settlement $settlement, array $applied): void
+    {
+        if ($settlement->side === 'receivable' && $settlement->customer_id) {
+            $customer = Customer::query()->whereKey($settlement->customer_id)->lockForUpdate()->firstOrFail();
+            $this->reverseReceivable($customer, $applied);
+        } elseif ($settlement->supplier_id) {
+            $supplier = Supplier::query()->whereKey($settlement->supplier_id)->lockForUpdate()->firstOrFail();
+            $this->reversePayable($supplier, $applied);
         }
     }
 }

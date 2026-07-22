@@ -175,31 +175,9 @@ class SettlementController extends Controller
         }
     }
 
-    /**
-     * Undo a settlement's posting: cheque settlements reverse each cleared cheque
-     * from its own snapshot; cash-like settlements reverse the settlement snapshot.
-     */
+    /** Undo a settlement's posting (delegates to the shared service logic). */
     private function reverseSettlement(Settlement $settlement, SettlementService $posting): void
     {
-        if ($settlement->mode === 'Cheque') {
-            foreach ($settlement->cheques as $cheque) {
-                if ($cheque->cleared_at && is_array($cheque->applied)) {
-                    $this->reverseSnapshot($settlement, $cheque->applied, $posting);
-                }
-            }
-        } elseif (is_array($settlement->applied)) {
-            $this->reverseSnapshot($settlement, $settlement->applied, $posting);
-        }
-    }
-
-    private function reverseSnapshot(Settlement $settlement, array $applied, SettlementService $posting): void
-    {
-        if ($settlement->side === 'receivable' && $settlement->customer_id) {
-            $customer = Customer::query()->whereKey($settlement->customer_id)->lockForUpdate()->firstOrFail();
-            $posting->reverseReceivable($customer, $applied);
-        } elseif ($settlement->supplier_id) {
-            $supplier = Supplier::query()->whereKey($settlement->supplier_id)->lockForUpdate()->firstOrFail();
-            $posting->reversePayable($supplier, $applied);
-        }
+        $posting->reverseSettlementPosting($settlement);
     }
 }

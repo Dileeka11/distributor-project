@@ -8,6 +8,7 @@ use App\Models\Invoice;
 use App\Models\Item;
 use App\Models\ItemBatch;
 use App\Services\NumberService;
+use App\Services\SettlementService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -89,9 +90,13 @@ class InvoiceController extends Controller
         ]);
     }
 
-    public function destroy(Invoice $invoice): JsonResponse
+    public function destroy(Invoice $invoice, SettlementService $posting): JsonResponse
     {
-        DB::transaction(function () use ($invoice) {
+        DB::transaction(function () use ($invoice, $posting) {
+            // Auto-remove receipts recorded against this invoice, restoring its
+            // paid amount first so the receivable reversal below is exact.
+            $posting->purgeSettlementsForInvoice($invoice);
+            $invoice->refresh();
             $this->reverseInvoiceEffects($invoice);
             $invoice->delete(); // lines + cheques cascade
         });

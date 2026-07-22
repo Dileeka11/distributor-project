@@ -133,6 +133,7 @@ function SupplierViewModal({ sup, onClose, onEdit }: { sup: Supplier; onClose: (
 
   return (
     <Modal
+      lg
       title={
         <span className="flex items-center gap-3">
           <span className="grid place-items-center w-[38px] h-[38px] rounded-[10px]" style={{ background: 'var(--blue-soft)', color: 'var(--blue)' }}><Truck size={18} /></span>

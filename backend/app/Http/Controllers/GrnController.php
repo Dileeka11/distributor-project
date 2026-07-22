@@ -8,6 +8,7 @@ use App\Models\Item;
 use App\Models\ItemBatch;
 use App\Models\Supplier;
 use App\Services\NumberService;
+use App\Services\SettlementService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -89,9 +90,13 @@ class GrnController extends Controller
         ]);
     }
 
-    public function destroy(Grn $grn): JsonResponse
+    public function destroy(Grn $grn, SettlementService $posting): JsonResponse
     {
-        DB::transaction(function () use ($grn) {
+        DB::transaction(function () use ($grn, $posting) {
+            // Auto-remove payments recorded against this GRN, restoring its paid
+            // amount first so the payable reversal below is exact.
+            $posting->purgeSettlementsForGrn($grn);
+            $grn->refresh();
             $this->reverseGrnEffects($grn);
             $grn->delete(); // lines + cheques cascade
         });
