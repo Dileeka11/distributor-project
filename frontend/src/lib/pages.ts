@@ -20,6 +20,20 @@ export const PAGES: PageDef[] = [
   { key: 'settings', label: 'Settings', to: '/settings', group: 'System' },
 ];
 
+/**
+ * Extra capabilities (not pages) that can be granted to a non-admin user.
+ * Admins always have them; everyone else only when ticked in System Users.
+ */
+export interface CapabilityDef { key: string; label: string; hint: string; }
+
+export const CAPABILITIES: CapabilityDef[] = [
+  {
+    key: 'tax_control',
+    label: 'Tax / VAT control',
+    hint: 'Can switch tax on for an invoice or GRN. Without this, tax stays off.',
+  },
+];
+
 // Pages an admin implicitly owns exclusively, and one everyone can always land on.
 const ADMIN_ONLY = new Set(['users']);
 const ALWAYS = new Set(['dashboard']);
@@ -31,6 +45,12 @@ export function canAccess(user: User | null, key: string): boolean {
   if (ADMIN_ONLY.has(key)) return false;
   if (ALWAYS.has(key)) return true;
   return (user.permissions ?? []).includes(key);
+}
+
+/** Can this user use the given capability (admins always can)? */
+export function canUse(user: User | null, key: string): boolean {
+  if (!user) return false;
+  return !!user.is_admin || (user.permissions ?? []).includes(key);
 }
 
 /** The first page (route) this user is allowed to see — used for redirects. */

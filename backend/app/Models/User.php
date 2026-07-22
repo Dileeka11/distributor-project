@@ -38,17 +38,21 @@ class User extends Authenticatable
     ];
 
     /**
-     * Get the attributes that should be cast.
+     * The attributes that should be cast.
+     * (Property form — Laravel 8 ignores the casts() method, which would leave
+     * `permissions` uncast and store the literal string "Array".)
      *
-     * @return array<string, string>
+     * @var array<string, string>
      */
-    protected function casts(): array
+    protected $casts = [
+        'email_verified_at' => 'datetime',
+        'is_admin' => 'boolean',
+        'permissions' => 'array',
+    ];
+
+    /** Is this user allowed to use the given page or capability? */
+    public function can_use(string $key): bool
     {
-        return [
-            'email_verified_at' => 'datetime',
-            'password' => 'hashed',
-            'is_admin' => 'boolean',
-            'permissions' => 'array',
-        ];
+        return (bool) $this->is_admin || in_array($key, $this->permissions ?? [], true);
     }
 }

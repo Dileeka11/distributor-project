@@ -12,6 +12,9 @@ import { SearchBar, Empty, Segmented, Stat } from '@/components/ui/Common';
 import { Modal } from '@/components/ui/Modal';
 import { Field, Select, MoneyInput, Input } from '@/components/ui/Field';
 import { SearchSelect } from '@/components/ui/SearchSelect';
+import { Switch } from '@/components/ui/Common';
+import { useAuth } from '@/store/auth';
+import { canUse } from '@/lib/pages';
 import type { Customer, Invoice, Item, ItemBatch } from '@/types';
 
 type Tab = 'all' | 'cash' | 'credit';
@@ -108,7 +111,12 @@ export default function InvoicesPage() {
 
 function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoice | null; onClose: () => void; onSaved: () => void }) {
   const { settings } = useSettings();
-  const taxDefault = Number(settings.tax_rate ?? 0);
+  const { user } = useAuth();
+  // Tax is off unless switched on, and only users granted "Tax / VAT control"
+  // (admins always) may switch it on.
+  const mayTax = canUse(user, 'tax_control');
+  const settingsTax = Number(settings.tax_rate ?? 0);
+  const [taxOn, setTaxOn] = useState(false);
   const isEdit = !!editInvoice;
 
   const [type, setType] = useState<'cash' | 'credit'>('cash');
@@ -118,7 +126,7 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
   const [lines, setLines] = useState<DraftLine[]>([blankLine()]);
   const [paid, setPaid] = useState('');
   const [cheques, setCheques] = useState<ChequeRow[]>([]);
-  const [taxRate, setTaxRate] = useState(taxDefault);
+  const taxRate = mayTax && taxOn ? settingsTax : 0;
 
   // When editing, load the full invoice (lines + cheques) and pre-fill the form.
   useEffect(() => {
@@ -129,7 +137,7 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
       setCustomerId(Number(d.customer_id));
       setDiscCash(Number(d.cash_discount) > 0);
       setDiscCheque(Number(d.cheque_discount) > 0);
-      setTaxRate(Number(d.tax_rate));
+      setTaxOn(Number(d.tax_rate) > 0);
       setLines((d.lines ?? []).map((l) => ({ item_id: Number(l.item_id), batch_id: l.batch_id ? Number(l.batch_id) : '', qty: String(Number(l.qty)), price: String(Number(l.price)) })));
       (d.lines ?? []).forEach((l) => loadBatches(Number(l.item_id)));
       setPaid(d.type === 'credit' ? String(Number(d.advance ?? d.paid)) : '');
@@ -230,11 +238,24 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
         </>
       }
     >
-      <div className="flex items-center justify-between mb-5">
+      <div className="flex items-end justify-between mb-5 gap-4 flex-wrap">
         <div>
           <div className="text-[13px] font-semibold mb-2" style={{ color: 'var(--text-muted)' }}>Invoice type</div>
           <Segmented accent value={type} onChange={(v) => setType(v as 'cash' | 'credit')} options={[{ value: 'cash', label: '💵 Cash' }, { value: 'credit', label: '📄 Credit' }]} />
         </div>
+        {mayTax && (
+          <label className="flex items-center gap-2.5 cursor-pointer px-3.5 py-2.5 rounded-[10px]" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+            <Switch on={taxOn} onClick={() => setTaxOn((t) => !t)} />
+            <span className="text-[13px]">
+              <b>Apply tax / VAT</b>
+              <span className="block text-[11.5px]" style={{ color: settingsTax <= 0 && taxOn ? 'var(--amber)' : 'var(--text-faint)' }}>
+                {!taxOn ? 'Off — no tax charged'
+                  : settingsTax > 0 ? `Charging ${settingsTax}% on this invoice`
+                  : 'Tax rate is 0% — set it in Settings'}
+              </span>
+            </span>
+          </label>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-4 mb-5">

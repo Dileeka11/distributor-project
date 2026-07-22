@@ -44,7 +44,7 @@ class GrnController extends Controller
     public function store(StoreGrnRequest $request): JsonResponse
     {
         $data = $request->validated();
-        $taxRate = (float) ($data['tax_rate'] ?? 0);
+        $taxRate = $this->allowedTaxRate($request, $data);
 
         $grn = DB::transaction(function () use ($data, $taxRate, $request) {
             $grn = new Grn([
@@ -75,7 +75,7 @@ class GrnController extends Controller
         );
 
         $data = $request->validated();
-        $taxRate = (float) ($data['tax_rate'] ?? 0);
+        $taxRate = $this->allowedTaxRate($request, $data);
 
         DB::transaction(function () use ($grn, $data, $taxRate) {
             // Undo the old GRN's effects, then re-apply from the edited data.
@@ -102,6 +102,17 @@ class GrnController extends Controller
         });
 
         return response()->json(['message' => 'GRN deleted']);
+    }
+
+    /**
+     * Tax may only be charged by a user granted the "tax_control" capability
+     * (admins always). Everyone else bills at 0% whatever the client sends.
+     */
+    private function allowedTaxRate(Request $request, array $data): float
+    {
+        $user = $request->user();
+
+        return ($user && $user->can_use('tax_control')) ? (float) ($data['tax_rate'] ?? 0) : 0.0;
     }
 
     /**

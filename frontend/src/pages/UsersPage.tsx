@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Empty } from '@/components/ui/Common';
 import { Modal } from '@/components/ui/Modal';
 import { Field, Input } from '@/components/ui/Field';
-import { PAGES } from '@/lib/pages';
+import { PAGES, CAPABILITIES } from '@/lib/pages';
 import { useAuth } from '@/store/auth';
 import type { User } from '@/types';
 
@@ -144,6 +144,22 @@ function UserModal({ rec, onClose, onSaved }: { rec: User | null; onClose: () =>
             })}
           </div>
           <div className="text-[11.5px] mt-2" style={{ color: 'var(--text-faint)' }}>Dashboard is always available. This user will only see the pages ticked above.</div>
+
+          <div className="text-[13px] font-semibold mt-5 mb-2" style={{ color: 'var(--text-muted)' }}>Extra permissions</div>
+          <div className="flex flex-col gap-2">
+            {CAPABILITIES.map((c) => {
+              const on = perms.includes(c.key);
+              return (
+                <label key={c.key} className="flex items-start gap-2.5 text-[13px] px-3 py-2.5 rounded-[9px] border border-border cursor-pointer" style={{ background: on ? 'var(--surface-2)' : undefined }}>
+                  <input type="checkbox" checked={on} onChange={() => toggle(c.key)} style={{ marginTop: 2 }} />
+                  <span>
+                    <b>{c.label}</b>
+                    <span className="block text-[11.5px]" style={{ color: 'var(--text-faint)' }}>{c.hint}</span>
+                  </span>
+                </label>
+              );
+            })}
+          </div>
         </div>
       )}
     </Modal>

@@ -44,7 +44,7 @@ class InvoiceController extends Controller
     public function store(StoreInvoiceRequest $request): JsonResponse
     {
         $data = $request->validated();
-        $taxRate = (float) ($data['tax_rate'] ?? 0);
+        $taxRate = $this->allowedTaxRate($request, $data);
 
         $invoice = DB::transaction(function () use ($data, $taxRate, $request) {
             $invoice = new Invoice([
@@ -75,7 +75,7 @@ class InvoiceController extends Controller
         );
 
         $data = $request->validated();
-        $taxRate = (float) ($data['tax_rate'] ?? 0);
+        $taxRate = $this->allowedTaxRate($request, $data);
 
         DB::transaction(function () use ($invoice, $data, $taxRate) {
             // Undo the old invoice's effects, then re-apply from the edited data.
@@ -102,6 +102,17 @@ class InvoiceController extends Controller
         });
 
         return response()->json(['message' => 'Invoice deleted']);
+    }
+
+    /**
+     * Tax may only be charged by a user granted the "tax_control" capability
+     * (admins always). Everyone else bills at 0% whatever the client sends.
+     */
+    private function allowedTaxRate(Request $request, array $data): float
+    {
+        $user = $request->user();
+
+        return ($user && $user->can_use('tax_control')) ? (float) ($data['tax_rate'] ?? 0) : 0.0;
     }
 
     /**

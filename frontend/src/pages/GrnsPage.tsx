@@ -7,7 +7,9 @@ import { useSettings } from '@/store/settings';
 import { PageHead } from '@/components/PageHead';
 import { Button } from '@/components/ui/Button';
 import { Badge, statusBadge } from '@/components/ui/Badge';
-import { SearchBar, Empty, Segmented, Stat } from '@/components/ui/Common';
+import { SearchBar, Empty, Segmented, Stat, Switch } from '@/components/ui/Common';
+import { useAuth } from '@/store/auth';
+import { canUse } from '@/lib/pages';
 import { Modal } from '@/components/ui/Modal';
 import { Field, MoneyInput, Input } from '@/components/ui/Field';
 import { SearchSelect } from '@/components/ui/SearchSelect';
@@ -252,7 +254,13 @@ export default function GrnsPage() {
 
 function CreateGrn({ editGrn, onClose, onSaved }: { editGrn?: Grn | null; onClose: () => void; onSaved: () => void }) {
   const { settings } = useSettings();
-  const taxRate = Number(settings.tax_rate ?? 0);
+  const { user } = useAuth();
+  // Tax is off unless switched on, and only users granted "Tax / VAT control"
+  // (admins always) may switch it on.
+  const mayTax = canUse(user, 'tax_control');
+  const settingsTax = Number(settings.tax_rate ?? 0);
+  const [taxOn, setTaxOn] = useState(false);
+  const taxRate = mayTax && taxOn ? settingsTax : 0;
   const isEdit = !!editGrn;
   const [type, setType] = useState<'cash' | 'credit'>('credit');
   const [supplierId, setSupplierId] = useState<number | ''>('');
@@ -266,6 +274,7 @@ function CreateGrn({ editGrn, onClose, onSaved }: { editGrn?: Grn | null; onClos
     void http.get(`/api/grns/${editGrn.id}`).then((r) => {
       const d: Grn = r.data.data;
       setType(d.type);
+      setTaxOn(Number(d.tax_rate) > 0);
       setSupplierId(Number(d.supplier_id));
       setLines((d.lines ?? []).map((l) => ({
         item_id: Number(l.item_id),
@@ -354,11 +363,24 @@ function CreateGrn({ editGrn, onClose, onSaved }: { editGrn?: Grn | null; onClos
         </>
       }
     >
-      <div className="flex items-center justify-between mb-5">
+      <div className="flex items-end justify-between mb-5 gap-4 flex-wrap">
         <div>
           <div className="text-[13px] font-semibold mb-2" style={{ color: 'var(--text-muted)' }}>Purchase type</div>
           <Segmented accent value={type} onChange={(v) => setType(v as 'cash' | 'credit')} options={[{ value: 'cash', label: '💵 Cash' }, { value: 'credit', label: '📄 Credit' }]} />
         </div>
+        {mayTax && (
+          <label className="flex items-center gap-2.5 cursor-pointer px-3.5 py-2.5 rounded-[10px]" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+            <Switch on={taxOn} onClick={() => setTaxOn((t) => !t)} />
+            <span className="text-[13px]">
+              <b>Apply tax / VAT</b>
+              <span className="block text-[11.5px]" style={{ color: settingsTax <= 0 && taxOn ? 'var(--amber)' : 'var(--text-faint)' }}>
+                {!taxOn ? 'Off — no tax charged'
+                  : settingsTax > 0 ? `Charging ${settingsTax}% on this GRN`
+                  : 'Tax rate is 0% — set it in Settings'}
+              </span>
+            </span>
+          </label>
+        )}
       </div>
 
       <div className="mb-5">
