@@ -45,7 +45,7 @@ export default function OutstandingPage() {
   const [allSuppliers, setAllSuppliers] = useState<Supplier[]>([]);
   const [partyFilter, setPartyFilter] = useState<number | ''>('');
   const [target, setTarget] = useState<{ side: Tab; rec: Customer | Supplier } | null>(null);
-  const [chequeReport, setChequeReport] = useState(false);
+  const [chequeReport, setChequeReport] = useState<Tab | null>(null);
   const [editTarget, setEditTarget] = useState<{ side: Tab; rec: Customer | Supplier; settlement: Settlement; outstanding: number } | null>(null);
 
   const load = async () => {
@@ -169,7 +169,12 @@ export default function OutstandingPage() {
       <PageHead
         title="Outstanding & Settlement"
         sub="Track and clear credit dues — receivables from customers and payables to suppliers."
-        actions={<Button variant="subtle" icon={<Banknote size={16} />} onClick={() => setChequeReport(true)}>Supplier cheques</Button>}
+        actions={
+          <>
+            <Button variant="subtle" icon={<Banknote size={16} />} onClick={() => setChequeReport('receivable')}>Customer cheques</Button>
+            <Button variant="subtle" icon={<Banknote size={16} />} onClick={() => setChequeReport('payable')}>Supplier cheques</Button>
+          </>
+        }
       />
 
       <div className="grid grid-cols-3 gap-4 mb-6">
@@ -314,11 +319,12 @@ export default function OutstandingPage() {
       </div>
 
       {chequeReport && (
-        <SupplierChequesModal
-          suppliers={allSuppliers}
-          grnCheques={grnCheques}
+        <PartyChequesModal
+          side={chequeReport}
+          parties={chequeReport === 'payable' ? allSuppliers : allCustomers}
+          txnCheques={chequeReport === 'payable' ? grnCheques : cheques}
           settlementCheques={settlementCheques}
-          onClose={() => setChequeReport(false)}
+          onClose={() => setChequeReport(null)}
         />
       )}
 
@@ -348,30 +354,41 @@ export default function OutstandingPage() {
   );
 }
 
-// All cheques written to suppliers, with a searchable supplier filter and a
-// pending / passed view — opened from the page-head "Supplier cheques" button.
-function SupplierChequesModal({ suppliers, grnCheques, settlementCheques, onClose }: {
-  suppliers: Supplier[];
-  grnCheques: GrnChequeRecord[];
+// All cheques for one side of the ledger — customer cheques received against
+// invoices / receipts, or supplier cheques written against GRNs / payments —
+// with a searchable party filter, pending / passed view and a print report.
+function PartyChequesModal({ side, parties, txnCheques, settlementCheques, onClose }: {
+  side: Tab;
+  parties: (Customer | Supplier)[];
+  txnCheques: ChequeRecord[] | GrnChequeRecord[];
   settlementCheques: SettlementChequeRecord[];
   onClose: () => void;
 }) {
   const { settings } = useSettings();
-  const [supplierId, setSupplierId] = useState<number | ''>('');
+  const [partyId, setPartyId] = useState<number | ''>('');
   const [status, setStatus] = useState<'pending' | 'passed' | 'all'>('pending');
 
-  // Unify GRN cheques and payable settlement cheques into one list.
+  const isPayable = side === 'payable';
+  const partyWord = isPayable ? 'Supplier' : 'Customer';
+  const allLabel = isPayable ? 'All suppliers' : 'All customers';
+  const refHead = isPayable ? 'GRN / Pay total' : 'Invoice / Receipt total';
+  const pendingLabel = isPayable ? 'To pay (pending)' : 'To receive (pending)';
+
+  // Unify the transaction cheques (invoice / GRN) with settlement cheques.
   const rows = [
-    ...grnCheques.map((c) => ({
-      key: `g${c.id}`, ref: c.grn_no, supplierId: Number(c.supplier_id), supplier: c.supplier_name,
-      no: c.cheque_no, date: c.cheque_date, amount: Number(c.amount), refTotal: Number(c.grn_total), cleared: c.cleared,
-    })),
-    ...settlementCheques.filter((c) => c.side === 'payable').map((c) => ({
-      key: `s${c.id}`, ref: c.settlement_code, supplierId: Number(c.supplier_id ?? 0), supplier: c.party_name ?? '—',
+    ...txnCheques.map((c) => {
+      const g = c as GrnChequeRecord;
+      const i = c as ChequeRecord;
+      return isPayable
+        ? { key: `t${g.id}`, ref: g.grn_no, partyId: Number(g.supplier_id), party: g.supplier_name, no: g.cheque_no, date: g.cheque_date, amount: Number(g.amount), refTotal: Number(g.grn_total), cleared: g.cleared }
+        : { key: `t${i.id}`, ref: i.invoice_no, partyId: Number(i.customer_id), party: i.customer_name, no: i.cheque_no, date: i.cheque_date, amount: Number(i.amount), refTotal: Number(i.invoice_total), cleared: i.cleared };
+    }),
+    ...settlementCheques.filter((c) => c.side === side).map((c) => ({
+      key: `s${c.id}`, ref: c.settlement_code, partyId: Number((isPayable ? c.supplier_id : c.customer_id) ?? 0), party: c.party_name ?? '—',
       no: c.cheque_no, date: c.cheque_date, amount: Number(c.amount), refTotal: Number(c.settlement_amount), cleared: c.cleared,
     })),
   ]
-    .filter((r) => (supplierId === '' || r.supplierId === supplierId))
+    .filter((r) => (partyId === '' || r.partyId === partyId))
     .filter((r) => (status === 'all' ? true : status === 'passed' ? r.cleared : !r.cleared))
     // Oldest cheque date first — the ones due soonest at the top.
     .sort((a, b) => String(a.date ?? '9999').localeCompare(String(b.date ?? '9999')));
@@ -383,14 +400,15 @@ function SupplierChequesModal({ suppliers, grnCheques, settlementCheques, onClos
   const printReport = () => {
     const w = window.open('', '_blank', 'width=840,height=900');
     if (!w) return;
-    const supName = supplierId === '' ? 'All suppliers' : (suppliers.find((s) => Number(s.id) === supplierId)?.name ?? '');
-    const statusLabel = status === 'pending' ? 'To pay (pending)' : status === 'passed' ? 'Passed' : 'All';
+    const title = `${partyWord} cheques`;
+    const partyName = partyId === '' ? allLabel : (parties.find((p) => Number(p.id) === partyId)?.name ?? '');
+    const statusLabel = status === 'pending' ? pendingLabel : status === 'passed' ? 'Passed' : 'All';
     const tr = rows.map((r) => `<tr>
-      <td class="mono">${r.no ?? '—'}</td><td>${r.supplier}</td><td class="mono">${r.ref}</td>
+      <td class="mono">${r.no ?? '—'}</td><td>${r.party}</td><td class="mono">${r.ref}</td>
       <td>${r.date ? prettyDate(r.date) : '—'}</td><td class="r">${fmt(r.amount)}</td>
       <td class="r">${fmt(r.refTotal)}</td><td>${r.cleared ? 'Passed' : 'Pending'}</td>
     </tr>`).join('');
-    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Supplier cheques — ${supName}</title>
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${title} — ${partyName}</title>
       <style>
         *{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif}
         body{margin:36px;color:#1c1f26} h1{font-size:19px;margin:0} .sub{color:#666;font-size:12px;margin-top:4px}
@@ -400,10 +418,10 @@ function SupplierChequesModal({ suppliers, grnCheques, settlementCheques, onClos
         .mono{font-family:Consolas,monospace}
         .total{margin-top:14px;display:flex;justify-content:space-between;font-size:15px;font-weight:800}
       </style></head><body>
-      <h1>${settings.company || 'Distributor'} — Supplier cheques</h1>
-      <div class="sub">${supName} · ${statusLabel} · generated ${prettyDate(new Date().toISOString())}</div>
+      <h1>${settings.company || 'Distributor'} — ${title}</h1>
+      <div class="sub">${partyName} · ${statusLabel} · generated ${prettyDate(new Date().toISOString())}</div>
       <table>
-        <thead><tr><th>Cheque No</th><th>Supplier</th><th>Against</th><th>Cheque date</th><th class="r">Value</th><th class="r">GRN / Pay total</th><th>Status</th></tr></thead>
+        <thead><tr><th>Cheque No</th><th>${partyWord}</th><th>Against</th><th>Cheque date</th><th class="r">Value</th><th class="r">${refHead}</th><th>Status</th></tr></thead>
         <tbody>${tr || '<tr><td colspan="7">No cheques for this filter.</td></tr>'}</tbody>
       </table>
       <div class="total"><span>${rows.length} cheque${rows.length === 1 ? '' : 's'}</span><span>Rs ${fmt(total)}</span></div>
@@ -416,7 +434,7 @@ function SupplierChequesModal({ suppliers, grnCheques, settlementCheques, onClos
   return (
     <Modal
       lg
-      title={<span className="flex items-center gap-2.5"><Banknote size={20} style={{ color: 'var(--blue)' }} /> Supplier cheques</span>}
+      title={<span className="flex items-center gap-2.5"><Banknote size={20} style={{ color: isPayable ? 'var(--blue)' : 'var(--green)' }} /> {partyWord} cheques</span>}
       onClose={onClose}
       footer={
         <>
@@ -432,18 +450,18 @@ function SupplierChequesModal({ suppliers, grnCheques, settlementCheques, onClos
     >
       <div className="flex gap-2.5 mb-4 items-center flex-wrap">
         <SearchSelect
-          items={suppliers}
-          value={supplierId}
-          onChange={setSupplierId}
-          allLabel="All suppliers"
+          items={parties}
+          value={partyId}
+          onChange={setPartyId}
+          allLabel={allLabel}
           placeholder="Search name, code or mobile…"
           width={280}
-          subtitle={(s) => `${s.code}${s.phone ? ` · ${s.phone}` : ''}`}
+          subtitle={(p) => `${p.code}${p.phone ? ` · ${p.phone}` : ''}`}
         />
         <Segmented
           value={status}
           onChange={(v) => setStatus(v as 'pending' | 'passed' | 'all')}
-          options={[{ value: 'pending', label: 'To pay (pending)' }, { value: 'passed', label: 'Passed' }, { value: 'all', label: 'All' }]}
+          options={[{ value: 'pending', label: pendingLabel }, { value: 'passed', label: 'Passed' }, { value: 'all', label: 'All' }]}
         />
         <Button variant="subtle" icon={<Printer size={15} />} className="ml-auto" onClick={printReport}>Print / PDF</Button>
       </div>
@@ -451,12 +469,12 @@ function SupplierChequesModal({ suppliers, grnCheques, settlementCheques, onClos
       <div className="card overflow-hidden">
         <div style={{ maxHeight: 380, overflow: 'auto' }}>
           <table className="tbl">
-            <thead><tr><th>Cheque No</th><th>Supplier</th><th>Against</th><th>Cheque date</th><th className="num">Value</th><th className="num">GRN / Pay total</th><th>Status</th></tr></thead>
+            <thead><tr><th>Cheque No</th><th>{partyWord}</th><th>Against</th><th>Cheque date</th><th className="num">Value</th><th className="num">{refHead}</th><th>Status</th></tr></thead>
             <tbody>
               {rows.map((r) => (
                 <tr key={r.key}>
                   <td className="mono font-semibold">{r.no || '—'}</td>
-                  <td className="font-semibold">{r.supplier}</td>
+                  <td className="font-semibold">{r.party}</td>
                   <td className="mono text-[12.5px]" style={{ color: 'var(--text-muted)' }}>{r.ref}</td>
                   <td className="text-[12.5px] whitespace-nowrap">{r.date ? prettyDate(r.date) : '—'}</td>
                   <td className="num money font-bold">{fmt(r.amount)}</td>
@@ -469,7 +487,7 @@ function SupplierChequesModal({ suppliers, grnCheques, settlementCheques, onClos
         </div>
         {rows.length === 0 && (
           <div className="text-center py-8 text-[13px]" style={{ color: 'var(--text-faint)' }}>
-            {status === 'pending' ? 'No pending cheques to pay.' : 'No cheques found for this filter.'}
+            {status === 'pending' ? `No pending cheques to ${isPayable ? 'pay' : 'receive'}.` : 'No cheques found for this filter.'}
           </div>
         )}
       </div>
