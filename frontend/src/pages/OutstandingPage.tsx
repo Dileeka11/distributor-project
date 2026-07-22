@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Truck, Wallet, Scale, Check, Plus, X, Edit2, Trash2, ChevronDown, Search } from 'lucide-react';
+import { Truck, Wallet, Scale, Check, Plus, X, Edit2, Trash2, ChevronDown, Search, Banknote } from 'lucide-react';
 import { http, apiErrorMessage } from '@/lib/http';
 import { fmt, fmt0, compact, prettyDate, initials } from '@/lib/format';
 import { toast, confirmDelete } from '@/lib/toast';
@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Segmented, Stat, Empty, Avatar } from '@/components/ui/Common';
 import { Modal } from '@/components/ui/Modal';
 import { Field, Select, MoneyInput, Input } from '@/components/ui/Field';
+import { SearchSelect } from '@/components/ui/SearchSelect';
 import { cn } from '@/lib/cn';
 import type { ChequeRecord, Customer, GrnChequeRecord, ID, Settlement, SettlementChequeRecord, Supplier } from '@/types';
 
@@ -43,6 +44,7 @@ export default function OutstandingPage() {
   const [allSuppliers, setAllSuppliers] = useState<Supplier[]>([]);
   const [partyFilter, setPartyFilter] = useState<number | ''>('');
   const [target, setTarget] = useState<{ side: Tab; rec: Customer | Supplier } | null>(null);
+  const [chequeReport, setChequeReport] = useState(false);
   const [editTarget, setEditTarget] = useState<{ side: Tab; rec: Customer | Supplier; settlement: Settlement; outstanding: number } | null>(null);
 
   const load = async () => {
@@ -163,7 +165,11 @@ export default function OutstandingPage() {
 
   return (
     <div className="fade-in">
-      <PageHead title="Outstanding & Settlement" sub="Track and clear credit dues — receivables from customers and payables to suppliers." />
+      <PageHead
+        title="Outstanding & Settlement"
+        sub="Track and clear credit dues — receivables from customers and payables to suppliers."
+        actions={<Button variant="subtle" icon={<Banknote size={16} />} onClick={() => setChequeReport(true)}>Supplier cheques</Button>}
+      />
 
       <div className="grid grid-cols-3 gap-4 mb-6">
         <Stat label="Total receivable" cur="Rs" value={compact(totalRecv)} icon={<Wallet size={18} />} tint="amber" foot={`${receivables.length} customers`} />
@@ -306,6 +312,15 @@ export default function OutstandingPage() {
         </div>
       </div>
 
+      {chequeReport && (
+        <SupplierChequesModal
+          suppliers={allSuppliers}
+          grnCheques={grnCheques}
+          settlementCheques={settlementCheques}
+          onClose={() => setChequeReport(false)}
+        />
+      )}
+
       {target && (
         <SettleModal
           side={target.side}
@@ -329,6 +344,99 @@ export default function OutstandingPage() {
         />
       )}
     </div>
+  );
+}
+
+// All cheques written to suppliers, with a searchable supplier filter and a
+// pending / passed view — opened from the page-head "Supplier cheques" button.
+function SupplierChequesModal({ suppliers, grnCheques, settlementCheques, onClose }: {
+  suppliers: Supplier[];
+  grnCheques: GrnChequeRecord[];
+  settlementCheques: SettlementChequeRecord[];
+  onClose: () => void;
+}) {
+  const [supplierId, setSupplierId] = useState<number | ''>('');
+  const [status, setStatus] = useState<'pending' | 'passed' | 'all'>('pending');
+
+  // Unify GRN cheques and payable settlement cheques into one list.
+  const rows = [
+    ...grnCheques.map((c) => ({
+      key: `g${c.id}`, ref: c.grn_no, supplierId: Number(c.supplier_id), supplier: c.supplier_name,
+      no: c.cheque_no, date: c.cheque_date, amount: Number(c.amount), refTotal: Number(c.grn_total), cleared: c.cleared,
+    })),
+    ...settlementCheques.filter((c) => c.side === 'payable').map((c) => ({
+      key: `s${c.id}`, ref: c.settlement_code, supplierId: Number(c.supplier_id ?? 0), supplier: c.party_name ?? '—',
+      no: c.cheque_no, date: c.cheque_date, amount: Number(c.amount), refTotal: Number(c.settlement_amount), cleared: c.cleared,
+    })),
+  ]
+    .filter((r) => (supplierId === '' || r.supplierId === supplierId))
+    .filter((r) => (status === 'all' ? true : status === 'passed' ? r.cleared : !r.cleared))
+    // Oldest cheque date first — the ones due soonest at the top.
+    .sort((a, b) => String(a.date ?? '9999').localeCompare(String(b.date ?? '9999')));
+
+  const total = rows.reduce((s, r) => s + r.amount, 0);
+  const pendingCount = rows.filter((r) => !r.cleared).length;
+
+  return (
+    <Modal
+      lg
+      title={<span className="flex items-center gap-2.5"><Banknote size={20} style={{ color: 'var(--blue)' }} /> Supplier cheques</span>}
+      onClose={onClose}
+      footer={
+        <>
+          <div className="mr-auto flex items-center gap-3.5">
+            <span className="text-[13px]" style={{ color: 'var(--text-muted)' }}>
+              {rows.length} cheque{rows.length === 1 ? '' : 's'}{status === 'all' ? ` · ${pendingCount} pending` : ''}
+            </span>
+            <span className="text-[19px] font-extrabold mono">Rs {fmt(total)}</span>
+          </div>
+          <Button variant="primary" onClick={onClose}>Close</Button>
+        </>
+      }
+    >
+      <div className="flex gap-2.5 mb-4 items-center flex-wrap">
+        <SearchSelect
+          items={suppliers}
+          value={supplierId}
+          onChange={setSupplierId}
+          allLabel="All suppliers"
+          placeholder="Search name, code or mobile…"
+          width={280}
+          subtitle={(s) => `${s.code}${s.phone ? ` · ${s.phone}` : ''}`}
+        />
+        <Segmented
+          value={status}
+          onChange={(v) => setStatus(v as 'pending' | 'passed' | 'all')}
+          options={[{ value: 'pending', label: 'To pay (pending)' }, { value: 'passed', label: 'Passed' }, { value: 'all', label: 'All' }]}
+        />
+      </div>
+
+      <div className="card overflow-hidden">
+        <div style={{ maxHeight: 380, overflow: 'auto' }}>
+          <table className="tbl">
+            <thead><tr><th>Cheque No</th><th>Supplier</th><th>Against</th><th>Cheque date</th><th className="num">Value</th><th className="num">GRN / Pay total</th><th>Status</th></tr></thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.key}>
+                  <td className="mono font-semibold">{r.no || '—'}</td>
+                  <td className="font-semibold">{r.supplier}</td>
+                  <td className="mono text-[12.5px]" style={{ color: 'var(--text-muted)' }}>{r.ref}</td>
+                  <td className="text-[12.5px] whitespace-nowrap">{r.date ? prettyDate(r.date) : '—'}</td>
+                  <td className="num money font-bold">{fmt(r.amount)}</td>
+                  <td className="num money" style={{ color: 'var(--text-muted)' }}>{fmt(r.refTotal)}</td>
+                  <td><Badge kind={r.cleared ? 'green' : 'amber'} dot>{r.cleared ? 'Passed' : 'Pending'}</Badge></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {rows.length === 0 && (
+          <div className="text-center py-8 text-[13px]" style={{ color: 'var(--text-faint)' }}>
+            {status === 'pending' ? 'No pending cheques to pay.' : 'No cheques found for this filter.'}
+          </div>
+        )}
+      </div>
+    </Modal>
   );
 }
 
