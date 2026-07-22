@@ -27,8 +27,8 @@ export default function LoginPage() {
   const [err, setErr] = useState<string | null>(null);
   const [hint, setHint] = useState(false);
 
-  const company = settings.company ?? 'MediStock';
-  const logo = settings.logo ?? 'M';
+  const company = settings.company ?? 'Kadurata Kuda';
+  const logo = settings.logo ?? 'KK';
   const valid = username.trim().length > 0 && pw.trim().length > 0;
 
   async function onSubmit(e: FormEvent) {

@@ -84,7 +84,7 @@ class DatabaseSeeder extends Seeder
         }
 
         Setting::setMany([
-            'company' => 'MediStock',
+            'company' => 'Kadurata Kuda',
             'logo' => 'M',
             'accent' => '#C8102E',
             'accent_press' => '#a60d26',

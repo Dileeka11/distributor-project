@@ -24,6 +24,10 @@ Route::post('/auth/login', [AuthController::class, 'login'])
     ->middleware(['throttle:6,1'])
     ->name('auth.login');
 
+// Public: branding (company name, logo, colours) must render on the login
+// page before any user is authenticated.
+Route::get('/settings', [SettingController::class, 'index']);
+
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/auth/logout', [AuthController::class, 'logout'])->name('auth.logout');
     Route::get('/auth/me', [AuthController::class, 'me'])->name('auth.me');
@@ -97,6 +101,5 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/users/{user}', [UserController::class, 'update']);
     Route::delete('/users/{user}', [UserController::class, 'destroy']);
 
-    Route::get('/settings', [SettingController::class, 'index']);
     Route::put('/settings', [SettingController::class, 'update']);
 });
