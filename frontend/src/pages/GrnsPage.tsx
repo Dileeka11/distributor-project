@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, X, Check, Truck, Wallet, PackageOpen, Clock, Box, Download, Edit2, Trash2 } from 'lucide-react';
+import { Plus, X, Check, Truck, Wallet, PackageOpen, Clock, Box, Edit2, Trash2, Eye, Printer } from 'lucide-react';
 import { http, apiErrorMessage } from '@/lib/http';
 import { fmt, fmt0, compact, prettyDate } from '@/lib/format';
 import { toast, confirmDelete } from '@/lib/toast';
@@ -12,7 +12,139 @@ import { Modal } from '@/components/ui/Modal';
 import { Field, MoneyInput, Input } from '@/components/ui/Field';
 import { SearchSelect } from '@/components/ui/SearchSelect';
 import { TotalRow } from './InvoicesPage';
-import type { Grn, Item, Supplier } from '@/types';
+import type { AppSettings, Grn, Item, Supplier } from '@/types';
+
+// Printable Goods Received Note — company letterhead, supplier block, item
+// lines, totals, cheques and signature strip. Browser print → save as PDF.
+function printGrnDoc(d: Grn, settings: AppSettings): void {
+  const w = window.open('', '_blank', 'width=860,height=980');
+  if (!w) return;
+  const accent = settings.accent || '#C8102E';
+  const bal = Number(d.total) - Number(d.paid);
+  const statusLabel = d.status === 'paid' ? 'PAID' : d.status === 'partial' ? 'PARTIALLY PAID' : 'UNPAID';
+  const sup = d.supplier;
+  const rows = (d.lines ?? []).map((l, i) => `<tr>
+      <td class="c">${i + 1}</td><td><b>${l.name}</b></td>
+      <td class="r">${fmt0(Number(l.qty))}</td><td class="r">${fmt(Number(l.unit_price ?? l.price))}</td>
+      <td class="r">${Number(l.discount ?? 0) > 0 ? Number(l.discount) + '%' : '—'}</td>
+      <td class="r">${fmt(Number(l.price))}</td><td class="r"><b>${fmt(Number(l.total))}</b></td>
+    </tr>`).join('');
+  const cheques = (d.cheques ?? []).length === 0 ? '' : `
+    <div class="sec">Cheques given</div>
+    <table class="tb"><thead><tr><th>Cheque No</th><th>Cheque date</th><th class="r">Amount</th></tr></thead><tbody>
+      ${(d.cheques ?? []).map((c) => `<tr><td class="mono">${c.cheque_no || '—'}</td><td>${c.cheque_date ? prettyDate(c.cheque_date) : '—'}</td><td class="r">${fmt(Number(c.amount))}</td></tr>`).join('')}
+    </tbody></table>`;
+
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${d.no} — Goods Received Note</title>
+    <style>
+      *{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;box-sizing:border-box}
+      body{margin:0;color:#1c1f26;font-size:13px}
+      .bar{height:6px;background:${accent}}
+      .page{padding:34px 42px}
+      .head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:26px}
+      .logo{display:inline-grid;place-items:center;width:44px;height:44px;border-radius:11px;background:${accent};color:#fff;font-weight:800;font-size:17px}
+      .co{font-size:20px;font-weight:800;letter-spacing:-.02em}
+      .muted{color:#69707c;font-size:11.5px;line-height:1.55}
+      .doc{font-size:11px;font-weight:700;letter-spacing:.18em;color:${accent};text-transform:uppercase}
+      .no{font-family:Consolas,monospace;font-size:22px;font-weight:800;margin:2px 0}
+      .pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:10.5px;font-weight:700;letter-spacing:.06em}
+      .pill.type{background:${accent}18;color:${accent};border:1px solid ${accent}55}
+      .pill.st{background:${bal > 0 ? '#fdecec' : '#e8f6ec'};color:${bal > 0 ? '#c0392b' : '#0a7d34'};border:1px solid ${bal > 0 ? '#f5c6c0' : '#bfe5c9'}}
+      .cols{display:flex;gap:18px;margin-bottom:22px}
+      .card{flex:1;border:1px solid #e6e9ef;border-radius:12px;padding:14px 16px}
+      .lbl{font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#98a1b0;margin-bottom:6px}
+      .sup{font-size:15px;font-weight:800}
+      .sec{font-size:12px;font-weight:700;margin:18px 0 8px;color:#3c4350}
+      table.tb{width:100%;border-collapse:collapse}
+      .tb th{background:${accent}10;color:#3c4350;font-size:10px;text-transform:uppercase;letter-spacing:.08em;text-align:left;padding:8px;border-bottom:2px solid ${accent}44}
+      .tb td{padding:8px;border-bottom:1px solid #eef0f2}
+      .r{text-align:right} .c{text-align:center;color:#98a1b0} .mono{font-family:Consolas,monospace}
+      .totwrap{display:flex;justify-content:flex-end;margin-top:14px}
+      .tot{width:290px} .tot .row{display:flex;justify-content:space-between;padding:4px 0;font-size:12.5px}
+      .tot .grand{border-top:2px solid #1c1f26;margin-top:6px;padding-top:8px;font-size:16px;font-weight:800}
+      .tot .due{color:#c0392b;font-weight:700}
+      .sign{display:flex;gap:34px;margin-top:52px}
+      .sign div{flex:1;border-top:1.5px dotted #9aa3b2;padding-top:6px;font-size:11px;color:#69707c;text-align:center}
+      .foot{margin-top:30px;font-size:10.5px;color:#98a1b0;display:flex;justify-content:space-between}
+      @media print{.page{padding:24px 30px}}
+    </style></head><body>
+    <div class="bar"></div>
+    <div class="page">
+      <div class="head">
+        <div style="display:flex;gap:14px;align-items:flex-start">
+          <span class="logo">${settings.logo || 'K'}</span>
+          <div>
+            <div class="co">${settings.company || 'Distributor'}</div>
+            <div class="muted">
+              ${settings.address ? settings.address + '<br>' : ''}
+              ${[settings.phone, settings.email].filter(Boolean).join(' · ')}
+              ${settings.vat_no ? '<br>VAT: ' + settings.vat_no : ''}
+            </div>
+          </div>
+        </div>
+        <div style="text-align:right">
+          <div class="doc">Goods Received Note</div>
+          <div class="no">${d.no}</div>
+          <div class="muted">${prettyDate(d.date)}</div>
+          <div style="margin-top:7px;display:flex;gap:6px;justify-content:flex-end">
+            <span class="pill type">${d.type === 'cash' ? 'CASH' : 'CREDIT'}</span>
+            <span class="pill st">${statusLabel}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="cols">
+        <div class="card">
+          <div class="lbl">Received from (supplier)</div>
+          <div class="sup">${sup?.name ?? '—'}</div>
+          <div class="muted" style="margin-top:4px">
+            ${sup?.code ? '<span class="mono">' + sup.code + '</span><br>' : ''}
+            ${sup?.contact ? sup.contact + '<br>' : ''}
+            ${sup?.phone ? sup.phone + '<br>' : ''}
+            ${sup?.address ?? ''}
+          </div>
+        </div>
+        <div class="card">
+          <div class="lbl">Payment summary</div>
+          <div class="muted" style="line-height:2">
+            Purchase total <b style="color:#1c1f26;float:right">Rs ${fmt(Number(d.total))}</b><br>
+            Paid <b style="color:#0a7d34;float:right">Rs ${fmt(Number(d.paid))}</b><br>
+            Payable outstanding <b style="color:${bal > 0 ? '#c0392b' : '#0a7d34'};float:right">Rs ${fmt(Math.max(bal, 0))}</b>
+          </div>
+        </div>
+      </div>
+
+      <div class="sec">Items received</div>
+      <table class="tb">
+        <thead><tr><th style="width:30px">#</th><th>Item</th><th class="r">Qty in</th><th class="r">Unit price</th><th class="r">Disc</th><th class="r">Unit cost</th><th class="r">Amount</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+
+      <div class="totwrap"><div class="tot">
+        <div class="row"><span>Subtotal</span><span>Rs ${fmt(Number(d.subtotal))}</span></div>
+        <div class="row"><span>Tax / VAT (${Number(d.tax_rate)}%)</span><span>Rs ${fmt(Number(d.tax_amount))}</span></div>
+        <div class="row grand"><span>Total</span><span>Rs ${fmt(Number(d.total))}</span></div>
+        <div class="row"><span>Paid</span><span>Rs ${fmt(Number(d.paid))}</span></div>
+        ${bal > 0 ? `<div class="row due"><span>Payable outstanding</span><span>Rs ${fmt(bal)}</span></div>` : ''}
+      </div></div>
+
+      ${cheques}
+
+      <div class="sign">
+        <div>Prepared by</div>
+        <div>Checked by</div>
+        <div>Goods received by</div>
+      </div>
+      <div class="foot">
+        <span>Generated ${new Date().toLocaleString()}</span>
+        <span>Computer-generated document · ${settings.company || ''}</span>
+      </div>
+    </div>
+    </body></html>`);
+  w.document.close();
+  w.focus();
+  w.print();
+}
 
 type Tab = 'all' | 'cash' | 'credit';
 
@@ -23,6 +155,7 @@ const unitCost = (l: DraftLine) => (Number(l.unit_price) || 0) * (1 - (Number(l.
 interface ChequeRow { no: string; date: string; amount: string; }
 
 export default function GrnsPage() {
+  const { settings } = useSettings();
   const [rows, setRows] = useState<Grn[]>([]);
   const [q, setQ] = useState('');
   const [tab, setTab] = useState<Tab>('all');
@@ -32,6 +165,14 @@ export default function GrnsPage() {
 
   const load = () => http.get('/api/grns', { params: { q, type: tab === 'all' ? undefined : tab } }).then((r) => setRows(r.data.data));
   useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [q, tab]);
+
+  // Fetch the full GRN (supplier + lines + cheques) and open the print document.
+  const printGrn = async (g: Grn) => {
+    try {
+      const { data } = await http.get(`/api/grns/${g.id}`);
+      printGrnDoc(data.data as Grn, settings);
+    } catch (e) { toast(apiErrorMessage(e), 'err'); }
+  };
 
   const cashTotal = rows.filter((g) => g.type === 'cash').reduce((s, g) => s + Number(g.total), 0);
   const creditTotal = rows.filter((g) => g.type === 'credit').reduce((s, g) => s + Number(g.total), 0);
@@ -79,6 +220,8 @@ export default function GrnsPage() {
                   <td><Badge kind={st.kind} dot>{st.label}</Badge></td>
                   <td className="num" onClick={(e) => e.stopPropagation()}>
                     <div className="flex gap-1.5 justify-end">
+                      <Button variant="subtle" size="sm" icon={<Eye size={14} />} title="View GRN" onClick={() => setView(g)} />
+                      <Button variant="subtle" size="sm" icon={<Printer size={14} />} title="Print / PDF" onClick={() => void printGrn(g)} />
                       <Button variant="subtle" size="sm" icon={<Edit2 size={14} />} onClick={() => setEditGrn(g)} />
                       <Button variant="subtle" size="sm" icon={<Trash2 size={14} />} onClick={async () => {
                         if (!(await confirmDelete({ title: 'Delete GRN?', html: `Delete <b>${g.no}</b>? Received stock will be removed${g.type === 'credit' ? " and the supplier's payable reversed" : ''}.` }))) return;
@@ -346,6 +489,7 @@ function CreateGrn({ editGrn, onClose, onSaved }: { editGrn?: Grn | null; onClos
 }
 
 function ViewGrn({ grn, onClose }: { grn: Grn; onClose: () => void }) {
+  const { settings } = useSettings();
   const [data, setData] = useState<Grn>(grn);
   useEffect(() => { void http.get(`/api/grns/${grn.id}`).then((r) => setData(r.data.data)); }, [grn.id]);
   const st = statusBadge(data.status);
@@ -354,7 +498,7 @@ function ViewGrn({ grn, onClose }: { grn: Grn; onClose: () => void }) {
     <Modal
       title={<span className="flex items-center gap-2.5">{data.no} <Badge kind={data.type === 'cash' ? 'blue' : 'amber'}>{data.type === 'cash' ? 'Cash' : 'Credit'}</Badge></span>}
       onClose={onClose}
-      footer={<><Button variant="ghost" icon={<Download size={15} />} onClick={onClose}>Download</Button><Button variant="primary" onClick={onClose}>Close</Button></>}
+      footer={<><Button variant="ghost" icon={<Printer size={15} />} onClick={() => printGrnDoc(data, settings)}>Print / PDF</Button><Button variant="primary" onClick={onClose}>Close</Button></>}
     >
       <div className="flex justify-between mb-5">
         <div>
