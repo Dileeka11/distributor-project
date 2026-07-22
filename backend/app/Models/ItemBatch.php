@@ -12,6 +12,9 @@ class ItemBatch extends Model
     ];
 
     protected $casts = [
+        // PHP < 8.1 returns numeric DB columns as strings; keep ids integers.
+        'item_id' => 'integer',
+        'grn_id' => 'integer',
         'unit_price' => 'decimal:2',
         'discount' => 'decimal:2',
         'unit_cost' => 'decimal:2',

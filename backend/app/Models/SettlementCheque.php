@@ -10,6 +10,8 @@ class SettlementCheque extends Model
     protected $fillable = ['settlement_id', 'cheque_no', 'cheque_date', 'amount', 'cleared_at', 'applied'];
 
     protected $casts = [
+        // PHP < 8.1 returns numeric DB columns as strings; keep ids integers.
+        'settlement_id' => 'integer',
         'cheque_date' => 'date',
         'amount' => 'decimal:2',
         'cleared_at' => 'datetime',

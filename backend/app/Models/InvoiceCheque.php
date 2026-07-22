@@ -10,6 +10,8 @@ class InvoiceCheque extends Model
     protected $fillable = ['invoice_id', 'cheque_no', 'cheque_date', 'amount', 'cleared_at'];
 
     protected $casts = [
+        // PHP < 8.1 returns numeric DB columns as strings; keep ids integers.
+        'invoice_id' => 'integer',
         'cheque_date' => 'date',
         'amount' => 'decimal:2',
         'cleared_at' => 'datetime',

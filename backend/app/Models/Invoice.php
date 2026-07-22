@@ -18,6 +18,9 @@ class Invoice extends Model
     ];
 
     protected $casts = [
+        // PHP < 8.1 returns numeric DB columns as strings; keep ids integers.
+        'customer_id' => 'integer',
+        'created_by' => 'integer',
         'date' => 'date',
         'subtotal' => 'decimal:2',
         'cash_discount' => 'decimal:2',

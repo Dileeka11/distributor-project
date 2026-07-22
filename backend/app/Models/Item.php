@@ -18,6 +18,8 @@ class Item extends Model
     ];
 
     protected $casts = [
+        // PHP < 8.1 returns numeric DB columns as strings; keep ids integers.
+        'category_id' => 'integer',
         'distributor_price' => 'decimal:2',
         'wholesale_price' => 'decimal:2',
         'retail_price' => 'decimal:2',

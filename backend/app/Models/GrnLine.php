@@ -10,6 +10,9 @@ class GrnLine extends Model
     protected $fillable = ['grn_id', 'item_id', 'name', 'qty', 'unit_price', 'discount', 'price', 'total'];
 
     protected $casts = [
+        // PHP < 8.1 returns numeric DB columns as strings; keep ids integers.
+        'grn_id' => 'integer',
+        'item_id' => 'integer',
         'qty' => 'decimal:2',
         'unit_price' => 'decimal:2',
         'discount' => 'decimal:2',

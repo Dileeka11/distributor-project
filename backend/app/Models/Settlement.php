@@ -17,6 +17,10 @@ class Settlement extends Model
     ];
 
     protected $casts = [
+        // PHP < 8.1 returns numeric DB columns as strings; keep ids integers.
+        'customer_id' => 'integer',
+        'supplier_id' => 'integer',
+        'created_by' => 'integer',
         'date' => 'date',
         'cheque_date' => 'date',
         'amount' => 'decimal:2',

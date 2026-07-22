@@ -10,6 +10,10 @@ class InvoiceLine extends Model
     protected $fillable = ['invoice_id', 'item_id', 'batch_id', 'name', 'qty', 'price', 'total'];
 
     protected $casts = [
+        // PHP < 8.1 returns numeric DB columns as strings; keep ids integers.
+        'invoice_id' => 'integer',
+        'item_id' => 'integer',
+        'batch_id' => 'integer',
         'qty' => 'decimal:2',
         'price' => 'decimal:2',
         'total' => 'decimal:2',

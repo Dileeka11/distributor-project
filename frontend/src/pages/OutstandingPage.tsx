@@ -69,12 +69,16 @@ export default function OutstandingPage() {
   // Unified cheque rows for the active tab: customer (invoice) cheques on
   // receivables, supplier (GRN) cheques on payables, plus cheques captured while
   // settling outstanding (Collect / Pay) — referenced by their receipt code.
+  // Number() the party ids: older PHP/MySQL stacks serialize them as strings.
   const txnRows = tab === 'payable'
-    ? grnCheques.map((c) => ({ kind: 'grn' as const, id: c.id, partyId: c.supplier_id, ref: c.grn_no, party: c.supplier_name, no: c.cheque_no, date: c.cheque_date, amount: c.amount, total: c.grn_total, cleared: c.cleared }))
-    : cheques.map((c) => ({ kind: 'invoice' as const, id: c.id, partyId: c.customer_id, ref: c.invoice_no, party: c.customer_name, no: c.cheque_no, date: c.cheque_date, amount: c.amount, total: c.invoice_total, cleared: c.cleared }));
+    ? grnCheques.map((c) => ({ kind: 'grn' as const, id: c.id, partyId: Number(c.supplier_id), ref: c.grn_no, party: c.supplier_name, no: c.cheque_no, date: c.cheque_date, amount: c.amount, total: c.grn_total, cleared: c.cleared }))
+    : cheques.map((c) => ({ kind: 'invoice' as const, id: c.id, partyId: Number(c.customer_id), ref: c.invoice_no, party: c.customer_name, no: c.cheque_no, date: c.cheque_date, amount: c.amount, total: c.invoice_total, cleared: c.cleared }));
   const settleRows = settlementCheques
     .filter((c) => c.side === tab)
-    .map((c) => ({ kind: 'settlement' as const, id: c.id, partyId: (tab === 'payable' ? c.supplier_id : c.customer_id) ?? undefined, ref: c.settlement_code, party: c.party_name ?? '—', no: c.cheque_no, date: c.cheque_date, amount: c.amount, total: c.settlement_amount, cleared: c.cleared }));
+    .map((c) => {
+      const pid = tab === 'payable' ? c.supplier_id : c.customer_id;
+      return { kind: 'settlement' as const, id: c.id, partyId: pid == null ? undefined : Number(pid), ref: c.settlement_code, party: c.party_name ?? '—', no: c.cheque_no, date: c.cheque_date, amount: c.amount, total: c.settlement_amount, cleared: c.cleared };
+    });
   const allChequeRows: ChequeTxnRow[] = [...txnRows, ...settleRows];
 
   const toggleChequeRow = async (r: ChequeTxnRow) => {
@@ -306,7 +310,7 @@ export default function OutstandingPage() {
         <SettleModal
           side={target.side}
           rec={target.rec}
-          chequeRows={allChequeRows.filter((r) => r.partyId === target.rec.id)}
+          chequeRows={allChequeRows.filter((r) => r.partyId === Number(target.rec.id))}
           onToggleCheque={toggleChequeRow}
           onClose={() => setTarget(null)}
           onSaved={() => { setTarget(null); void load(); }}
@@ -318,7 +322,7 @@ export default function OutstandingPage() {
           rec={editTarget.rec}
           editSettlement={editTarget.settlement}
           outstandingOverride={editTarget.outstanding}
-          chequeRows={allChequeRows.filter((r) => r.partyId === editTarget.rec.id)}
+          chequeRows={allChequeRows.filter((r) => r.partyId === Number(editTarget.rec.id))}
           onToggleCheque={toggleChequeRow}
           onClose={() => setEditTarget(null)}
           onSaved={() => { setEditTarget(null); void load(); }}

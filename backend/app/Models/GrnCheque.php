@@ -10,6 +10,8 @@ class GrnCheque extends Model
     protected $fillable = ['grn_id', 'cheque_no', 'cheque_date', 'amount', 'cleared_at'];
 
     protected $casts = [
+        // PHP < 8.1 returns numeric DB columns as strings; keep ids integers.
+        'grn_id' => 'integer',
         'cheque_date' => 'date',
         'amount' => 'decimal:2',
         'cleared_at' => 'datetime',
