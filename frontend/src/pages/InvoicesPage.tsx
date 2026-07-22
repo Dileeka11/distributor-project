@@ -11,6 +11,7 @@ import { Badge, statusBadge } from '@/components/ui/Badge';
 import { SearchBar, Empty, Segmented, Stat } from '@/components/ui/Common';
 import { Modal } from '@/components/ui/Modal';
 import { Field, Select, MoneyInput, Input } from '@/components/ui/Field';
+import { SearchSelect } from '@/components/ui/SearchSelect';
 import type { Customer, Invoice, Item, ItemBatch } from '@/types';
 
 type Tab = 'all' | 'cash' | 'credit';
@@ -158,7 +159,7 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
   };
   const batchesFor = (l: DraftLine) => (l.item_id ? batchesByItem[Number(l.item_id)] ?? [] : []);
 
-  const cust = customers.find((c) => c.id === customerId);
+  const cust = customers.find((c) => Number(c.id) === customerId);
   const cashPct = cust ? Number(cust.cash_discount) : 0;
   const chequePct = cust ? Number(cust.cheque_discount) : 0;
 
@@ -178,10 +179,13 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
   const setLine = (i: number, patch: Partial<DraftLine>) =>
     setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
   const pickItem = (i: number, id: number | '') => {
-    const item = items.find((x) => x.id === id);
-    setLine(i, { item_id: id, batch_id: '', price: item ? String(item.wholesale_price) : '0' });
+    const item = items.find((x) => Number(x.id) === id);
+    setLine(i, { item_id: id, batch_id: '', price: item ? String(Number(item.wholesale_price)) : '0' });
     if (id) loadBatches(Number(id));
   };
+  // Out-of-stock items can't be sold — keep them out of the picker (except a
+  // line's already-selected item when editing an old invoice).
+  const pickableItems = (l: DraftLine) => items.filter((x) => Number(x.stock) > 0 || Number(x.id) === l.item_id);
   const addLine = () => setLines((ls) => [...ls, blankLine()]);
   const delLine = (i: number) => setLines((ls) => (ls.length > 1 ? ls.filter((_, idx) => idx !== i) : ls));
 
@@ -235,10 +239,14 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
 
       <div className="grid grid-cols-2 gap-4 mb-5">
         <Field label="Customer" req hint="Who is buying">
-          <Select value={customerId === '' ? '' : String(customerId)} onChange={(e) => { setCustomerId(e.target.value ? Number(e.target.value) : ''); setDiscCash(false); setDiscCheque(false); }}>
-            <option value="">Select customer…</option>
-            {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </Select>
+          <SearchSelect
+            items={customers}
+            value={customerId}
+            onChange={(v) => { setCustomerId(v); setDiscCash(false); setDiscCheque(false); }}
+            allLabel="Select customer…"
+            placeholder="Search name, code or mobile…"
+            subtitle={(c) => `${c.code}${c.phone ? ` · ${c.phone}` : ''}`}
+          />
         </Field>
         <Field label="Discount" hint="Tick to apply the customer's cash and / or cheque discount.">
           <div className="flex flex-col gap-2 pt-1.5">
@@ -262,18 +270,18 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
           </thead>
           <tbody>
             {lines.map((l, i) => {
-              const it = items.find((x) => x.id === l.item_id);
+              const it = items.find((x) => Number(x.id) === l.item_id);
               return (
                 <tr key={i} className="border-t border-border">
                   <td className="p-1.5">
-                    <Select value={l.item_id === '' ? '' : String(l.item_id)} onChange={(e) => pickItem(i, e.target.value ? Number(e.target.value) : '')} style={{ height: 36, fontSize: 13 }}>
-                      <option value="">Select item…</option>
-                      {items.map((x) => (
-                        <option key={x.id} value={x.id} disabled={x.stock <= 0}>
-                          {x.code} · {x.name}{x.stock <= 0 ? ' (out)' : ''}
-                        </option>
-                      ))}
-                    </Select>
+                    <SearchSelect
+                      items={pickableItems(l)}
+                      value={l.item_id}
+                      onChange={(v) => pickItem(i, v)}
+                      allLabel="Select item…"
+                      placeholder="Search item name or code…"
+                      subtitle={(x) => `${x.code} · stock ${fmt0(Number(x.stock))}`}
+                    />
                     {batchesFor(l).length > 0 && (
                       <Select value={l.batch_id === '' ? '' : String(l.batch_id)} onChange={(e) => setLine(i, { batch_id: e.target.value ? Number(e.target.value) : '' })} style={{ height: 32, fontSize: 12, marginTop: 6 }}>
                         <option value="">Select cost-batch…</option>
