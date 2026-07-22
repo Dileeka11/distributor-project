@@ -374,7 +374,8 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
           <TotalRow k="Subtotal" v={fmt(totals.subtotal)} />
           {totals.cashAmt > 0 && <TotalRow k={`Cash discount (${cashPct}%)`} v={`-${fmt(totals.cashAmt)}`} />}
           {totals.chequeAmt > 0 && <TotalRow k={`Cheque discount (${chequePct}%)`} v={`-${fmt(totals.chequeAmt)}`} />}
-          <TotalRow k={`Tax / VAT (${taxRate}%)`} v={fmt(totals.taxAmt)} />
+          {/* Tax row only exists when tax is actually applied. */}
+          {taxRate > 0 && <TotalRow k={`Tax / VAT (${taxRate}%)`} v={fmt(totals.taxAmt)} />}
           <div className="h-px my-2.5" style={{ background: 'var(--border)' }} />
           <TotalRow k="Total" v={fmt(totals.total)} big />
           {type === 'credit' && (<>
@@ -483,7 +484,7 @@ function ViewInvoice({ inv, onClose }: { inv: Invoice; onClose: () => void }) {
           <TotalRow k="Subtotal" v={fmt(data.subtotal as number)} />
           {Number(data.cash_discount) > 0 && <TotalRow k={`Cash discount (${data.cash_discount}%)`} v={`-${fmt(Number(data.subtotal) * Number(data.cash_discount) / 100)}`} />}
           {Number(data.cheque_discount) > 0 && <TotalRow k={`Cheque discount (${data.cheque_discount}%)`} v={`-${fmt(Number(data.subtotal) * Number(data.cheque_discount) / 100)}`} />}
-          <TotalRow k={`Tax (${data.tax_rate}%)`} v={fmt(data.tax_amount as number)} />
+          {Number(data.tax_rate) > 0 && <TotalRow k={`Tax (${data.tax_rate}%)`} v={fmt(data.tax_amount as number)} />}
           <div className="h-px my-2" style={{ background: 'var(--border)' }} />
           <TotalRow k="Total" v={fmt(data.total as number)} big />
           <TotalRow k="Paid" v={fmt(data.paid as number)} />

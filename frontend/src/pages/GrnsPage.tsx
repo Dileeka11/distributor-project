@@ -124,7 +124,7 @@ function printGrnDoc(d: Grn, settings: AppSettings): void {
 
       <div class="totwrap"><div class="tot">
         <div class="row"><span>Subtotal</span><span>Rs ${fmt(Number(d.subtotal))}</span></div>
-        <div class="row"><span>Tax / VAT (${Number(d.tax_rate)}%)</span><span>Rs ${fmt(Number(d.tax_amount))}</span></div>
+        ${Number(d.tax_rate) > 0 ? `<div class="row"><span>Tax / VAT (${Number(d.tax_rate)}%)</span><span>Rs ${fmt(Number(d.tax_amount))}</span></div>` : ''}
         <div class="row grand"><span>Total</span><span>Rs ${fmt(Number(d.total))}</span></div>
         <div class="row"><span>Paid</span><span>Rs ${fmt(Number(d.paid))}</span></div>
         ${bal > 0 ? `<div class="row due"><span>Payable outstanding</span><span>Rs ${fmt(bal)}</span></div>` : ''}
@@ -497,7 +497,8 @@ function CreateGrn({ editGrn, onClose, onSaved }: { editGrn?: Grn | null; onClos
         </div>
         <div className="rounded-[10px] p-4" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
           <TotalRow k="Subtotal" v={fmt(totals.subtotal)} />
-          <TotalRow k={`Tax / VAT (${taxRate}%)`} v={fmt(totals.taxAmt)} />
+          {/* Tax row only exists when tax is actually applied. */}
+          {taxRate > 0 && <TotalRow k={`Tax / VAT (${taxRate}%)`} v={fmt(totals.taxAmt)} />}
           <div className="h-px my-2.5" style={{ background: 'var(--border)' }} />
           <TotalRow k="Total" v={fmt(totals.total)} big />
           {type === 'credit' && (<>
@@ -551,7 +552,7 @@ function ViewGrn({ grn, onClose }: { grn: Grn; onClose: () => void }) {
       <div className="flex justify-end">
         <div className="w-[280px] rounded-[10px] p-4" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
           <TotalRow k="Subtotal" v={fmt(data.subtotal as number)} />
-          <TotalRow k={`Tax (${data.tax_rate}%)`} v={fmt(data.tax_amount as number)} />
+          {Number(data.tax_rate) > 0 && <TotalRow k={`Tax (${data.tax_rate}%)`} v={fmt(data.tax_amount as number)} />}
           <div className="h-px my-2" style={{ background: 'var(--border)' }} />
           <TotalRow k="Total" v={fmt(data.total as number)} big />
           <TotalRow k="Paid" v={fmt(data.paid as number)} />
