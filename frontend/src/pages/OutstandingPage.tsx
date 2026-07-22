@@ -654,19 +654,26 @@ function SettleModal({ side, rec, editSettlement, outstandingOverride, chequeRow
       lg
       title={(isEdit ? (side === 'receivable' ? 'Edit receipt — ' : 'Edit payment — ') : (side === 'receivable' ? 'Collect payment — ' : 'Pay supplier — ')) + rec.name}
       onClose={onClose}
-      footer={<>
-        {(chequeRows?.length ?? 0) > 0 && onToggleCheque && (
-          // Passed toggles already persist on click; this just confirms & closes
-          // the cheque section without recording an amount-based receipt.
-          <Button variant="primary" className="mr-auto" style={{ background: 'var(--green)', borderColor: 'var(--green)' }} onClick={() => { toast('Passed cheques saved'); onClose(); }}>
+      footer={(chequeRows?.length ?? 0) > 0 && onToggleCheque ? (
+        <>
+          <Button variant="primary" className="mr-auto" disabled={amt <= 0 || busy} onClick={save}>
+            {isEdit ? 'Save changes' : (side === 'receivable' ? 'Record receipt' : 'Record payment')} · Rs {fmt0(amt)}
+          </Button>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          {/* Passed toggles already persist on click; this just confirms & closes
+              the cheque section without recording an amount-based receipt. */}
+          <Button variant="primary" style={{ background: 'var(--green)', borderColor: 'var(--green)' }} onClick={() => { toast('Passed cheques saved'); onClose(); }}>
             Save passed cheque
           </Button>
-        )}
-        <Button variant="ghost" onClick={onClose}>Cancel</Button>
-        <Button variant="primary" disabled={amt <= 0 || busy} onClick={save}>
-          {isEdit ? 'Save changes' : (side === 'receivable' ? 'Record receipt' : 'Record payment')} · Rs {fmt0(amt)}
-        </Button>
-      </>}
+        </>
+      ) : (
+        <>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button variant="primary" disabled={amt <= 0 || busy} onClick={save}>
+            {isEdit ? 'Save changes' : (side === 'receivable' ? 'Record receipt' : 'Record payment')} · Rs {fmt0(amt)}
+          </Button>
+        </>
+      )}
     >
       <div className="rounded-[10px] p-4 mb-5 flex justify-between items-center" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
         <div>
