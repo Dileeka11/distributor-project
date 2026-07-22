@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Truck, Wallet, Scale, Check, Plus, X, Edit2, Trash2, ChevronDown, Search, Banknote } from 'lucide-react';
+import { Truck, Wallet, Scale, Check, Plus, X, Edit2, Trash2, ChevronDown, Search, Banknote, Printer } from 'lucide-react';
 import { http, apiErrorMessage } from '@/lib/http';
 import { fmt, fmt0, compact, prettyDate, initials } from '@/lib/format';
 import { toast, confirmDelete } from '@/lib/toast';
@@ -10,6 +10,7 @@ import { Segmented, Stat, Empty, Avatar } from '@/components/ui/Common';
 import { Modal } from '@/components/ui/Modal';
 import { Field, Select, MoneyInput, Input } from '@/components/ui/Field';
 import { SearchSelect } from '@/components/ui/SearchSelect';
+import { useSettings } from '@/store/settings';
 import { cn } from '@/lib/cn';
 import type { ChequeRecord, Customer, GrnChequeRecord, ID, Settlement, SettlementChequeRecord, Supplier } from '@/types';
 
@@ -355,6 +356,7 @@ function SupplierChequesModal({ suppliers, grnCheques, settlementCheques, onClos
   settlementCheques: SettlementChequeRecord[];
   onClose: () => void;
 }) {
+  const { settings } = useSettings();
   const [supplierId, setSupplierId] = useState<number | ''>('');
   const [status, setStatus] = useState<'pending' | 'passed' | 'all'>('pending');
 
@@ -376,6 +378,40 @@ function SupplierChequesModal({ suppliers, grnCheques, settlementCheques, onClos
 
   const total = rows.reduce((s, r) => s + r.amount, 0);
   const pendingCount = rows.filter((r) => !r.cleared).length;
+
+  // Print the filtered list — the browser dialog lets the user save as PDF.
+  const printReport = () => {
+    const w = window.open('', '_blank', 'width=840,height=900');
+    if (!w) return;
+    const supName = supplierId === '' ? 'All suppliers' : (suppliers.find((s) => Number(s.id) === supplierId)?.name ?? '');
+    const statusLabel = status === 'pending' ? 'To pay (pending)' : status === 'passed' ? 'Passed' : 'All';
+    const tr = rows.map((r) => `<tr>
+      <td class="mono">${r.no ?? '—'}</td><td>${r.supplier}</td><td class="mono">${r.ref}</td>
+      <td>${r.date ? prettyDate(r.date) : '—'}</td><td class="r">${fmt(r.amount)}</td>
+      <td class="r">${fmt(r.refTotal)}</td><td>${r.cleared ? 'Passed' : 'Pending'}</td>
+    </tr>`).join('');
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Supplier cheques — ${supName}</title>
+      <style>
+        *{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+        body{margin:36px;color:#1c1f26} h1{font-size:19px;margin:0} .sub{color:#666;font-size:12px;margin-top:4px}
+        table{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:18px}
+        th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:#777;padding:7px 6px;border-bottom:2px solid #d8dce2}
+        th.r,td.r{text-align:right} td{padding:7px 6px;border-bottom:1px solid #eef0f2}
+        .mono{font-family:Consolas,monospace}
+        .total{margin-top:14px;display:flex;justify-content:space-between;font-size:15px;font-weight:800}
+      </style></head><body>
+      <h1>${settings.company || 'Distributor'} — Supplier cheques</h1>
+      <div class="sub">${supName} · ${statusLabel} · generated ${prettyDate(new Date().toISOString())}</div>
+      <table>
+        <thead><tr><th>Cheque No</th><th>Supplier</th><th>Against</th><th>Cheque date</th><th class="r">Value</th><th class="r">GRN / Pay total</th><th>Status</th></tr></thead>
+        <tbody>${tr || '<tr><td colspan="7">No cheques for this filter.</td></tr>'}</tbody>
+      </table>
+      <div class="total"><span>${rows.length} cheque${rows.length === 1 ? '' : 's'}</span><span>Rs ${fmt(total)}</span></div>
+      </body></html>`);
+    w.document.close();
+    w.focus();
+    w.print();
+  };
 
   return (
     <Modal
@@ -409,6 +445,7 @@ function SupplierChequesModal({ suppliers, grnCheques, settlementCheques, onClos
           onChange={(v) => setStatus(v as 'pending' | 'passed' | 'all')}
           options={[{ value: 'pending', label: 'To pay (pending)' }, { value: 'passed', label: 'Passed' }, { value: 'all', label: 'All' }]}
         />
+        <Button variant="subtle" icon={<Printer size={15} />} className="ml-auto" onClick={printReport}>Print / PDF</Button>
       </div>
 
       <div className="card overflow-hidden">
