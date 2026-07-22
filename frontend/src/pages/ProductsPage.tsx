@@ -121,7 +121,7 @@ function ProductBuilder({ onClose, onSaved }: { onClose: () => void; onSaved: ()
     const item = items.find((x) => Number(x.id) === id);
     // Component price defaults to the item's retail (selling) price — editable.
     // The GRN cost-batch below only decides which purchase lot the qty comes from.
-    setLine(i, { item_id: id, batch_id: '', price: item ? String(Number(item.retail_price)) : '0' });
+    setLine(i, { item_id: id, batch_id: '', price: item ? Number(item.retail_price).toFixed(2) : '0' });
     if (id) loadBatches(Number(id));
   };
   const addLine = () => setLines((ls) => [...ls, blankLine()]);
@@ -236,7 +236,7 @@ function ProductBuilder({ onClose, onSaved }: { onClose: () => void; onSaved: ()
                     )}
                   </td>
                   <td className="p-1.5"><Input className="mono text-right" value={l.qty} onChange={(e) => setLine(i, { qty: e.target.value.replace(/\D/g, '') })} style={{ height: 36 }} /></td>
-                  <td className="p-1.5"><Input className="mono text-right" value={l.price} onChange={(e) => setLine(i, { price: e.target.value.replace(/[^\d.]/g, '') })} style={{ height: 36 }} /></td>
+                  <td className="p-1.5"><MoneyInput className="text-right" value={l.price} onChange={(v) => setLine(i, { price: v })} style={{ height: 36 }} /></td>
                   <td className="p-1.5 text-right money font-semibold">{fmt((Number(l.qty) || 0) * (Number(l.price) || 0))}</td>
                   <td className="p-1.5 text-right">
                     <button className="grid place-items-center w-7 h-7 rounded-md hover:bg-surface-2" onClick={() => delLine(i)} type="button"><X size={15} /></button>

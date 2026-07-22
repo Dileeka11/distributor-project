@@ -29,7 +29,7 @@ export function Textarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
 }
 
 export function MoneyInput({
-  value, onChange, placeholder, ...rest
+  value, onChange, placeholder, className, ...rest
 }: { value: string | number; onChange: (v: string) => void; placeholder?: string } & Omit<InputHTMLAttributes<HTMLInputElement>, 'onChange' | 'value'>) {
   return (
     <Input
@@ -38,7 +38,12 @@ export function MoneyInput({
       value={String(value ?? '')}
       placeholder={placeholder ?? '0.00'}
       onChange={(e) => onChange(e.target.value.replace(/[^\d.]/g, ''))}
-      className="mono"
+      // Settle typed values into ##.00 form once the field loses focus.
+      onBlur={() => {
+        const s = String(value ?? '').trim();
+        if (s !== '') onChange((Number(s) || 0).toFixed(2));
+      }}
+      className={cn('mono', className)}
       {...rest}
     />
   );

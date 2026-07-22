@@ -699,7 +699,7 @@ function SettleModal({ side, rec, editSettlement, outstandingOverride, chequeRow
                 <div key={i} className="flex gap-1.5 items-center">
                   <Input placeholder="Cheque no." value={c.no} onChange={(e) => setCheque(i, { no: e.target.value })} className="mono" style={{ height: 34, flex: 1, minWidth: 0 }} />
                   <Input type="date" value={c.date} onChange={(e) => setCheque(i, { date: e.target.value })} style={{ height: 34, width: 150 }} />
-                  <Input placeholder="0.00" inputMode="decimal" value={c.amount} onChange={(e) => setCheque(i, { amount: e.target.value.replace(/[^\d.]/g, '') })} className="mono text-right" style={{ height: 34, width: 110 }} />
+                  <MoneyInput value={c.amount} onChange={(v) => setCheque(i, { amount: v })} className="text-right" style={{ height: 34, width: 110 }} />
                   <button type="button" className="grid place-items-center w-7 h-7 rounded-md hover:bg-surface-2 flex-shrink-0" onClick={() => delCheque(i)}><X size={14} /></button>
                 </div>
               ))}

@@ -165,7 +165,7 @@ function CreateGrn({ editGrn, onClose, onSaved }: { editGrn?: Grn | null; onClos
     setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
   const pickItem = (i: number, id: number | '') => {
     const item = items.find((x) => Number(x.id) === id);
-    setLine(i, { item_id: id, unit_price: item ? String(Number(item.distributor_price)) : '0' });
+    setLine(i, { item_id: id, unit_price: item ? Number(item.distributor_price).toFixed(2) : '0' });
   };
   const addLine = () => setLines((ls) => [...ls, blankLine()]);
   const delLine = (i: number) => setLines((ls) => (ls.length > 1 ? ls.filter((_, idx) => idx !== i) : ls));
@@ -274,7 +274,7 @@ function CreateGrn({ editGrn, onClose, onSaved }: { editGrn?: Grn | null; onClos
                     />
                     {it && <div className="text-[12px] mt-1" style={{ color: 'var(--text-muted)' }}>On hand: {fmt0(it.stock)} · last cost Rs {fmt(Number(it.distributor_price))}</div>}
                   </td>
-                  <td className="p-1.5"><Input className="mono text-right" value={l.unit_price} onChange={(e) => setLine(i, { unit_price: e.target.value.replace(/[^\d.]/g, '') })} style={{ height: 36 }} /></td>
+                  <td className="p-1.5"><MoneyInput className="text-right" value={l.unit_price} onChange={(v) => setLine(i, { unit_price: v })} style={{ height: 36 }} /></td>
                   <td className="p-1.5"><Input className="mono text-right" value={l.discount} onChange={(e) => setLine(i, { discount: e.target.value.replace(/[^\d.]/g, '') })} style={{ height: 36 }} /></td>
                   <td className="p-1.5 text-right money" style={{ color: 'var(--text-muted)' }}>{fmt(unitCost(l))}</td>
                   <td className="p-1.5"><Input className="mono text-right" value={l.qty} onChange={(e) => setLine(i, { qty: e.target.value.replace(/\D/g, '') })} style={{ height: 36 }} /></td>
@@ -318,7 +318,7 @@ function CreateGrn({ editGrn, onClose, onSaved }: { editGrn?: Grn | null; onClos
                     <div key={i} className="flex gap-1.5 items-center">
                       <Input placeholder="Cheque no." value={c.no} onChange={(e) => setCheque(i, { no: e.target.value })} className="mono" style={{ height: 34, flex: 1, minWidth: 0 }} />
                       <Input type="date" value={c.date} onChange={(e) => setCheque(i, { date: e.target.value })} style={{ height: 34, width: 140 }} />
-                      <Input placeholder="0.00" inputMode="decimal" value={c.amount} onChange={(e) => setCheque(i, { amount: e.target.value.replace(/[^\d.]/g, '') })} className="mono text-right" style={{ height: 34, width: 96 }} />
+                      <MoneyInput value={c.amount} onChange={(v) => setCheque(i, { amount: v })} className="text-right" style={{ height: 34, width: 96 }} />
                       <button type="button" className="grid place-items-center w-7 h-7 rounded-md hover:bg-surface-2 flex-shrink-0" onClick={() => delCheque(i)}><X size={14} /></button>
                     </div>
                   ))}

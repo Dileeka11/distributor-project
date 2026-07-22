@@ -180,7 +180,7 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
     setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
   const pickItem = (i: number, id: number | '') => {
     const item = items.find((x) => Number(x.id) === id);
-    setLine(i, { item_id: id, batch_id: '', price: item ? String(Number(item.wholesale_price)) : '0' });
+    setLine(i, { item_id: id, batch_id: '', price: item ? Number(item.wholesale_price).toFixed(2) : '0' });
     if (id) loadBatches(Number(id));
   };
   // Out-of-stock items can't be sold — keep them out of the picker (except a
@@ -297,7 +297,7 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
                     )}
                   </td>
                   <td className="p-1.5"><Input className="mono text-right" value={l.qty} onChange={(e) => setLine(i, { qty: e.target.value.replace(/\D/g, '') })} style={{ height: 36 }} /></td>
-                  <td className="p-1.5"><Input className="mono text-right" value={l.price} onChange={(e) => setLine(i, { price: e.target.value.replace(/[^\d.]/g, '') })} style={{ height: 36 }} /></td>
+                  <td className="p-1.5"><MoneyInput className="text-right" value={l.price} onChange={(v) => setLine(i, { price: v })} style={{ height: 36 }} /></td>
                   <td className="p-1.5 text-right money font-semibold">{fmt((Number(l.qty) || 0) * (Number(l.price) || 0))}</td>
                   <td className="p-1.5 text-right">
                     <button className="grid place-items-center w-7 h-7 rounded-md hover:bg-surface-2" onClick={() => delLine(i)} type="button"><X size={15} /></button>
@@ -337,7 +337,7 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
                   <div key={i} className="flex gap-1.5 items-center">
                     <Input placeholder="Cheque no." value={c.no} onChange={(e) => setCheque(i, { no: e.target.value })} className="mono" style={{ height: 34, flex: 1, minWidth: 0 }} />
                     <Input type="date" value={c.date} onChange={(e) => setCheque(i, { date: e.target.value })} style={{ height: 34, width: 140 }} />
-                    <Input placeholder="0.00" inputMode="decimal" value={c.amount} onChange={(e) => setCheque(i, { amount: e.target.value.replace(/[^\d.]/g, '') })} className="mono text-right" style={{ height: 34, width: 96 }} />
+                    <MoneyInput value={c.amount} onChange={(v) => setCheque(i, { amount: v })} className="text-right" style={{ height: 34, width: 96 }} />
                     <button type="button" className="grid place-items-center w-7 h-7 rounded-md hover:bg-surface-2 flex-shrink-0" onClick={() => delCheque(i)}><X size={14} /></button>
                   </div>
                 ))}
