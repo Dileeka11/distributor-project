@@ -9,7 +9,8 @@ import { Button } from '@/components/ui/Button';
 import { Badge, statusBadge } from '@/components/ui/Badge';
 import { SearchBar, Empty, Segmented, Stat } from '@/components/ui/Common';
 import { Modal } from '@/components/ui/Modal';
-import { Field, Select, MoneyInput, Input } from '@/components/ui/Field';
+import { Field, MoneyInput, Input } from '@/components/ui/Field';
+import { SearchSelect } from '@/components/ui/SearchSelect';
 import { TotalRow } from './InvoicesPage';
 import type { Grn, Item, Supplier } from '@/types';
 
@@ -158,13 +159,13 @@ function CreateGrn({ editGrn, onClose, onSaved }: { editGrn?: Grn | null; onClos
     return { subtotal, taxAmt, total, paidNum, balance };
   }, [lines, taxRate, type, paid]);
 
-  const sup = suppliers.find((s) => s.id === supplierId);
+  const sup = suppliers.find((s) => Number(s.id) === supplierId);
 
   const setLine = (i: number, patch: Partial<DraftLine>) =>
     setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
   const pickItem = (i: number, id: number | '') => {
-    const item = items.find((x) => x.id === id);
-    setLine(i, { item_id: id, unit_price: item ? String(item.distributor_price) : '0' });
+    const item = items.find((x) => Number(x.id) === id);
+    setLine(i, { item_id: id, unit_price: item ? String(Number(item.distributor_price)) : '0' });
   };
   const addLine = () => setLines((ls) => [...ls, blankLine()]);
   const delLine = (i: number) => setLines((ls) => (ls.length > 1 ? ls.filter((_, idx) => idx !== i) : ls));
@@ -219,10 +220,14 @@ function CreateGrn({ editGrn, onClose, onSaved }: { editGrn?: Grn | null; onClos
 
       <div className="mb-5">
         <Field label="Supplier" req hint="Who you are buying stock from">
-          <Select value={supplierId === '' ? '' : String(supplierId)} onChange={(e) => setSupplierId(e.target.value ? Number(e.target.value) : '')}>
-            <option value="">Select supplier…</option>
-            {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </Select>
+          <SearchSelect
+            items={suppliers}
+            value={supplierId}
+            onChange={setSupplierId}
+            allLabel="Select supplier…"
+            placeholder="Search name, code or mobile…"
+            subtitle={(s) => `${s.code}${s.phone ? ` · ${s.phone}` : ''}`}
+          />
         </Field>
       </div>
 
@@ -255,15 +260,19 @@ function CreateGrn({ editGrn, onClose, onSaved }: { editGrn?: Grn | null; onClos
           </thead>
           <tbody>
             {lines.map((l, i) => {
-              const it = items.find((x) => x.id === l.item_id);
+              const it = items.find((x) => Number(x.id) === l.item_id);
               return (
                 <tr key={i} className="border-t border-border">
                   <td className="p-1.5">
-                    <Select value={l.item_id === '' ? '' : String(l.item_id)} onChange={(e) => pickItem(i, e.target.value ? Number(e.target.value) : '')} style={{ height: 36, fontSize: 13 }}>
-                      <option value="">Select item…</option>
-                      {items.map((x) => <option key={x.id} value={x.id}>{x.code} · {x.name}</option>)}
-                    </Select>
-                    {it && <div className="text-[12px] mt-1" style={{ color: 'var(--text-muted)' }}>On hand: {fmt0(it.stock)} · last cost Rs {fmt(it.distributor_price as number)}</div>}
+                    <SearchSelect
+                      items={items}
+                      value={l.item_id}
+                      onChange={(v) => pickItem(i, v)}
+                      allLabel="Select item…"
+                      placeholder="Search item name or code…"
+                      subtitle={(x) => `${x.code} · stock ${fmt0(Number(x.stock))}`}
+                    />
+                    {it && <div className="text-[12px] mt-1" style={{ color: 'var(--text-muted)' }}>On hand: {fmt0(it.stock)} · last cost Rs {fmt(Number(it.distributor_price))}</div>}
                   </td>
                   <td className="p-1.5"><Input className="mono text-right" value={l.unit_price} onChange={(e) => setLine(i, { unit_price: e.target.value.replace(/[^\d.]/g, '') })} style={{ height: 36 }} /></td>
                   <td className="p-1.5"><Input className="mono text-right" value={l.discount} onChange={(e) => setLine(i, { discount: e.target.value.replace(/[^\d.]/g, '') })} style={{ height: 36 }} /></td>

@@ -34,7 +34,7 @@ export function SearchSelect<T extends Pickable>({
     return () => document.removeEventListener('mousedown', onDoc);
   }, [open]);
 
-  const selected = items.find((i) => i.id === value);
+  const selected = items.find((i) => Number(i.id) === value);
   const ql = q.trim().toLowerCase();
   const list = ql
     ? items.filter((i) => i.name.toLowerCase().includes(ql) || (i.code ?? '').toLowerCase().includes(ql) || String(i.phone ?? '').toLowerCase().includes(ql))
@@ -55,10 +55,11 @@ export function SearchSelect<T extends Pickable>({
               <input autoFocus className="input" style={{ height: 34, paddingLeft: 32 }} value={q} onChange={(e) => setQ(e.target.value)} placeholder={placeholder} />
             </div>
           </div>
-          <div style={{ maxHeight: 240, overflow: 'auto' }} className="py-1">
+          {/* ~6 option rows visible; the rest scroll. */}
+          <div style={{ maxHeight: 318, overflow: 'auto' }} className="py-1">
             <button type="button" onClick={() => pick('')} className="w-full text-left px-3 py-2 text-[13px] hover:bg-surface-2" style={{ fontWeight: value === '' ? 700 : 400, background: value === '' ? 'var(--surface-2)' : undefined }}>{allLabel}</button>
             {list.map((i) => (
-              <button key={i.id} type="button" onClick={() => pick(i.id)} className="w-full text-left px-3 py-2 hover:bg-surface-2" style={{ background: i.id === value ? 'var(--surface-2)' : undefined }}>
+              <button key={i.id} type="button" onClick={() => pick(Number(i.id))} className="w-full text-left px-3 py-2 hover:bg-surface-2" style={{ background: Number(i.id) === value ? 'var(--surface-2)' : undefined }}>
                 <div className="text-[13px] font-medium">{i.name}</div>
                 {subtitle && <div className="text-[11.5px] mono" style={{ color: 'var(--text-muted)' }}>{subtitle(i)}</div>}
               </button>
