@@ -447,7 +447,7 @@ function CreateGrn({ editGrn, onClose, onSaved }: { editGrn?: Grn | null; onClos
                   <td className="p-1.5"><MoneyInput className="text-right" value={l.unit_price} onChange={(v) => setLine(i, { unit_price: v })} style={{ height: 36 }} /></td>
                   <td className="p-1.5"><Input className="mono text-right" value={l.discount} onChange={(e) => setLine(i, { discount: e.target.value.replace(/[^\d.]/g, '') })} style={{ height: 36 }} /></td>
                   <td className="p-1.5 text-right money" style={{ color: 'var(--text-muted)' }}>{fmt(unitCost(l))}</td>
-                  <td className="p-1.5"><Input className="mono text-right" value={l.qty} onChange={(e) => setLine(i, { qty: e.target.value.replace(/\D/g, '') })} style={{ height: 36 }} /></td>
+                  <td className="p-1.5"><Input className="mono text-right" value={l.qty} onChange={(e) => setLine(i, { qty: e.target.value.replace(/\D/g, '') })} onBlur={() => { if (!(Number(l.qty) > 0)) setLine(i, { qty: '1' }); }} style={{ height: 36 }} /></td>
                   <td className="p-1.5 text-right money font-semibold">{fmt((Number(l.qty) || 0) * unitCost(l))}</td>
                   <td className="p-1.5 text-right">
                     <button className="grid place-items-center w-7 h-7 rounded-md hover:bg-surface-2" onClick={() => delLine(i)} type="button"><X size={15} /></button>
