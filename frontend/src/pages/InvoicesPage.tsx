@@ -325,8 +325,14 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
             {lines.map((l, i) => {
               const it = items.find((x) => Number(x.id) === l.item_id);
               const batch = batchFor(l);
-              const cap = it ? lineCap(l, i) : 0;              // stock left for this line
-              const short = it ? (Number(l.qty) || 0) > cap : false;
+              const thisQty = Number(l.qty) || 0;
+              const cap = it ? lineCap(l, i) : 0;              // stock available to this line (excludes its own qty)
+              const short = it ? thisQty > cap : false;
+              const remaining = Math.max(0, cap - thisQty); // stock left AFTER this line's qty is billed
+              // "left" for a batch/old-stock option: pool available to this line,
+              // minus this line's qty when that option is the one selected.
+              const optLeft = (poolId: number, poolTotal: number) =>
+                fmt0(Math.max(0, poolTotal - batchUsedElsewhere(poolId, i) - (Number(l.batch_id) === poolId ? thisQty : 0)));
               return (
                 <tr key={i} className="border-t border-border">
                   <td className="p-1.5">
@@ -342,14 +348,14 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
                       <Select value={l.batch_id === '' ? '' : String(l.batch_id)} onChange={(e) => setLine(i, { batch_id: e.target.value === '' ? '' : Number(e.target.value) })} style={{ height: 32, fontSize: 12, marginTop: 6 }}>
                         <option value="">Select stock / batch…</option>
                         {it && looseFor(it) > 0 && (
-                          <option value="0">old stock · Rs {fmt(Number(it.wholesale_price))} · {fmt0(looseFor(it) - batchUsedElsewhere(0, i))} left</option>
+                          <option value="0">old stock · Rs {fmt(Number(it.wholesale_price))} · {optLeft(0, looseFor(it))} left</option>
                         )}
-                        {batchesFor(l).map((b) => <option key={b.id} value={b.id}>cost Rs {fmt(b.unit_cost as number)} · {fmt0(Number(b.qty_remaining) - batchUsedElsewhere(b.id, i))} left</option>)}
+                        {batchesFor(l).map((b) => <option key={b.id} value={b.id}>cost Rs {fmt(b.unit_cost as number)} · {optLeft(Number(b.id), Number(b.qty_remaining))} left</option>)}
                       </Select>
                     )}
                     {it && (
                       <div className="text-[12px] mt-1" style={{ color: short ? 'var(--red)' : 'var(--text-muted)' }}>
-                        Stock: {fmt0(cap)} left{l.batch_id === 0 ? ' (old stock)' : batch ? ' (this batch)' : ''} · {it.product
+                        Stock: {fmt0(remaining)} left{l.batch_id === 0 ? ' (old stock)' : batch ? ' (this batch)' : ''} · {it.product
                           ? <>Actual Rs {fmt(Number(it.product.actual_price))}</>
                           : <>WP Rs {fmt(it.wholesale_price as number)}</>}
                         {short ? ` — only ${fmt0(cap)} available` : ''}
