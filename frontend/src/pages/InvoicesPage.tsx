@@ -20,7 +20,7 @@ import type { Customer, Invoice, Item, ItemBatch } from '@/types';
 type Tab = 'all' | 'cash' | 'credit';
 
 interface DraftLine { item_id: number | ''; batch_id: number | ''; qty: string; price: string; }
-const blankLine = (): DraftLine => ({ item_id: '', batch_id: '', qty: '1', price: '0' });
+const blankLine = (): DraftLine => ({ item_id: '', batch_id: '', qty: '0', price: '0' });
 
 interface ChequeRow { no: string; date: string; amount: string; }
 
@@ -362,7 +362,7 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
                       </div>
                     )}
                   </td>
-                  <td className="p-1.5"><Input className="mono text-right" value={l.qty} onChange={(e) => setLine(i, { qty: e.target.value.replace(/\D/g, '') })} onBlur={() => { if (!(Number(l.qty) > 0)) setLine(i, { qty: '1' }); }} style={{ height: 36, borderColor: short ? 'var(--red)' : undefined }} /></td>
+                  <td className="p-1.5"><Input className="mono text-right" value={l.qty} onChange={(e) => setLine(i, { qty: e.target.value.replace(/\D/g, '') })} style={{ height: 36, borderColor: short ? 'var(--red)' : undefined }} /></td>
                   <td className="p-1.5"><MoneyInput className="text-right" value={l.price} onChange={(v) => setLine(i, { price: v })} style={{ height: 36 }} /></td>
                   <td className="p-1.5 text-right money font-semibold">{fmt((Number(l.qty) || 0) * (Number(l.price) || 0))}</td>
                   <td className="p-1.5 text-right">
