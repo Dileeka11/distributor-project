@@ -207,11 +207,18 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
     itemId === '' ? 0 : lines.reduce((s, l, idx) => s + (idx !== exceptIdx && Number(l.item_id) === Number(itemId) ? (Number(l.qty) || 0) : 0), 0);
   const batchUsedElsewhere = (batchId: number | '', exceptIdx: number) =>
     batchId === '' ? 0 : lines.reduce((s, l, idx) => s + (idx !== exceptIdx && Number(l.batch_id) === Number(batchId) ? (Number(l.qty) || 0) : 0), 0);
-  // Stock still available for one line = item (or chosen batch) stock minus what
-  // the other lines already took.
+  // "Old stock" = the item's stock that is NOT held in any cost-batch (opening
+  // stock + anything received without a batch). Shown as its own pickable row.
+  const looseFor = (it: Item) =>
+    Number(it.stock) - (batchesByItem[Number(it.id)] ?? []).reduce((s, b) => s + Number(b.qty_remaining), 0);
+
+  // Stock still available for one line, given which pool it draws from (a chosen
+  // cost-batch, the old-stock pool, or — when no batches — plain item stock),
+  // minus what the other lines already took from the same pool.
   const lineCap = (l: DraftLine, idx: number) => {
     const it = items.find((x) => Number(x.id) === l.item_id);
     if (!it) return Infinity;
+    if (l.batch_id === 0) return looseFor(it) - batchUsedElsewhere(0, idx);   // old stock
     const batch = batchFor(l);
     return batch
       ? Number(batch.qty_remaining) - batchUsedElsewhere(l.batch_id, idx)
@@ -332,18 +339,17 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
                       subtitle={(x) => `${x.code} · stock ${fmt0(Number(x.stock) - usedElsewhere(x.id, i))}`}
                     />
                     {batchesFor(l).length > 0 && (
-                      <Select value={l.batch_id === '' ? '' : String(l.batch_id)} onChange={(e) => setLine(i, { batch_id: e.target.value ? Number(e.target.value) : '' })} style={{ height: 32, fontSize: 12, marginTop: 6 }}>
-                        <option value="">Select cost-batch…</option>
-                        {batchesFor(l).map((b) => (
-                          <option key={b.id} value={b.id}>
-                            {b.grn?.no ? `${b.grn.no} · ` : ''}Cost Rs {fmt(b.unit_cost as number)} · old qty {fmt0(Number(b.qty_in ?? b.qty_remaining))} · {fmt0(Number(b.qty_remaining) - batchUsedElsewhere(b.id, i))} left
-                          </option>
-                        ))}
+                      <Select value={l.batch_id === '' ? '' : String(l.batch_id)} onChange={(e) => setLine(i, { batch_id: e.target.value === '' ? '' : Number(e.target.value) })} style={{ height: 32, fontSize: 12, marginTop: 6 }}>
+                        <option value="">Select stock / batch…</option>
+                        {it && looseFor(it) > 0 && (
+                          <option value="0">old stock · Rs {fmt(Number(it.wholesale_price))} · {fmt0(looseFor(it) - batchUsedElsewhere(0, i))} left</option>
+                        )}
+                        {batchesFor(l).map((b) => <option key={b.id} value={b.id}>cost Rs {fmt(b.unit_cost as number)} · {fmt0(Number(b.qty_remaining) - batchUsedElsewhere(b.id, i))} left</option>)}
                       </Select>
                     )}
                     {it && (
                       <div className="text-[12px] mt-1" style={{ color: short ? 'var(--red)' : 'var(--text-muted)' }}>
-                        Stock: {fmt0(cap)} left{batch ? ' (this batch)' : ''} · {it.product
+                        Stock: {fmt0(cap)} left{l.batch_id === 0 ? ' (old stock)' : batch ? ' (this batch)' : ''} · {it.product
                           ? <>Actual Rs {fmt(Number(it.product.actual_price))}</>
                           : <>WP Rs {fmt(it.wholesale_price as number)}</>}
                         {short ? ` — only ${fmt0(cap)} available` : ''}

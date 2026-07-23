@@ -141,6 +141,17 @@ class InvoiceController extends Controller
         $batchIds = collect($data['lines'])->pluck('batch_id')->filter()->unique();
         $batches = ItemBatch::query()->whereIn('id', $batchIds)->lockForUpdate()->get()->keyBy('id');
 
+        // "Old stock" available per item = total stock minus everything still
+        // held in cost-batches. Non-batch (old-stock) lines draw from this pool
+        // so the batch quantities and item stock never drift apart.
+        $batchHeld = ItemBatch::query()->whereIn('item_id', $itemIds)
+            ->selectRaw('item_id, COALESCE(SUM(qty_remaining), 0) AS held')
+            ->groupBy('item_id')->pluck('held', 'item_id');
+        $looseLeft = [];
+        foreach ($items as $id => $it) {
+            $looseLeft[$id] = (int) $it->stock - (int) ($batchHeld[$id] ?? 0);
+        }
+
         $subtotal = 0;
         $linesOut = [];
         foreach ($data['lines'] as $line) {
@@ -155,7 +166,9 @@ class InvoiceController extends Controller
                 abort_if(! $batch || (int) $batch->item_id !== (int) $item->id, 422, "Invalid batch for {$item->name}");
                 abort_if($batch->qty_remaining < $qty, 422, "Only {$batch->qty_remaining} left in the selected batch for {$item->name}");
             } else {
-                abort_if($item->stock < $qty, 422, "Insufficient stock for {$item->name}");
+                $loose = $looseLeft[$item->id] ?? (int) $item->stock;
+                abort_if($loose < $qty, 422, "Only {$loose} old stock left for {$item->name} — pick a cost-batch for the rest.");
+                $looseLeft[$item->id] = $loose - $qty;
             }
 
             $total = round($qty * $price, 2);
