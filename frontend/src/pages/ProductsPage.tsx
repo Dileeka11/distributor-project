@@ -224,7 +224,7 @@ function ProductBuilder({ onClose, onSaved }: { onClose: () => void; onSaved: ()
                     {batchesFor(l).length > 0 && (
                       <Select value={l.batch_id === '' ? '' : String(l.batch_id)} onChange={(e) => setLine(i, { batch_id: e.target.value ? Number(e.target.value) : '' })} style={{ height: 32, fontSize: 12, marginTop: 6 }}>
                         <option value="">Select cost-batch…</option>
-                        {batchesFor(l).map((b) => <option key={b.id} value={String(Number(b.id))}>GRN cost Rs {fmt(Number(b.unit_cost))} · {b.qty_remaining} left</option>)}
+                        {batchesFor(l).map((b) => <option key={b.id} value={String(Number(b.id))}>{b.grn?.no ? `${b.grn.no} · ` : ''}cost Rs {fmt(Number(b.unit_cost))} · old qty {fmt0(Number(b.qty_in ?? b.qty_remaining))} · {b.qty_remaining} left</option>)}
                       </Select>
                     )}
                     {it && (
@@ -336,7 +336,7 @@ function AssembleModal({ product, onClose, onSaved }: { product: Product; onClos
                         style={{ height: 32, fontSize: 12, marginTop: 6, maxWidth: 260 }}
                       >
                         <option value="">Select cost-batch…</option>
-                        {batchesOf(c).map((b) => <option key={b.id} value={String(Number(b.id))}>GRN cost Rs {fmt(Number(b.unit_cost))} · {b.qty_remaining} left</option>)}
+                        {batchesOf(c).map((b) => <option key={b.id} value={String(Number(b.id))}>{b.grn?.no ? `${b.grn.no} · ` : ''}cost Rs {fmt(Number(b.unit_cost))} · old qty {fmt0(Number(b.qty_in ?? b.qty_remaining))} · {b.qty_remaining} left</option>)}
                       </Select>
                     )}
                   </td>

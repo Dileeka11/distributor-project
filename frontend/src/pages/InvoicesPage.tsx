@@ -334,7 +334,11 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
                     {batchesFor(l).length > 0 && (
                       <Select value={l.batch_id === '' ? '' : String(l.batch_id)} onChange={(e) => setLine(i, { batch_id: e.target.value ? Number(e.target.value) : '' })} style={{ height: 32, fontSize: 12, marginTop: 6 }}>
                         <option value="">Select cost-batch…</option>
-                        {batchesFor(l).map((b) => <option key={b.id} value={b.id}>Cost Rs {fmt(b.unit_cost as number)} · {fmt0(Number(b.qty_remaining) - batchUsedElsewhere(b.id, i))} left</option>)}
+                        {batchesFor(l).map((b) => (
+                          <option key={b.id} value={b.id}>
+                            {b.grn?.no ? `${b.grn.no} · ` : ''}Cost Rs {fmt(b.unit_cost as number)} · old qty {fmt0(Number(b.qty_in ?? b.qty_remaining))} · {fmt0(Number(b.qty_remaining) - batchUsedElsewhere(b.id, i))} left
+                          </option>
+                        ))}
                       </Select>
                     )}
                     {it && (

@@ -88,7 +88,10 @@ export interface ItemBatch {
   unit_price: string | number;
   discount: string | number;
   unit_cost: string | number;
+  qty_in?: number;              // originally received on the GRN (the "old" lot size)
   qty_remaining: number;
+  grn_id?: ID;
+  grn?: { id: ID; no: string; date: string } | null;
 }
 
 export interface Invoice {

@@ -11,10 +11,13 @@ class ItemController extends Controller
 {
     public function batches(Item $item): JsonResponse
     {
+        // Include the source GRN + the originally-received quantity so the
+        // cost-batch picker can show which old purchase lot each batch is.
         $batches = $item->batches()
             ->where('qty_remaining', '>', 0)
+            ->with('grn:id,no,date')
             ->orderBy('id')
-            ->get(['id', 'unit_price', 'discount', 'unit_cost', 'qty_remaining']);
+            ->get(['id', 'grn_id', 'unit_price', 'discount', 'unit_cost', 'qty_in', 'qty_remaining']);
 
         return response()->json(['data' => $batches]);
     }
