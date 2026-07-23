@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { LayoutDashboard, Package, Boxes, Truck, Users, ReceiptText, PackageOpen, Scale, FileBarChart2, UserCog, CalendarCheck, Wallet, ShieldCheck, ChevronDown, Settings as SettingsIcon, LogOut } from 'lucide-react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '@/store/auth';
@@ -123,7 +123,9 @@ export function AppShell() {
         </header>
         <div className="flex-1 overflow-y-auto px-7 py-6 pb-16">
           <div className={wide ? 'w-full' : 'max-w-[1180px] mx-auto'}>
-            <Outlet />
+            <Suspense fallback={<div className="grid place-items-center py-20 text-[13px]" style={{ color: 'var(--text-muted)' }}>Loading…</div>}>
+              <Outlet />
+            </Suspense>
           </div>
         </div>
       </main>

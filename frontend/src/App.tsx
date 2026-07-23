@@ -1,24 +1,27 @@
-import { useEffect, type ReactNode } from 'react';
+import { lazy, useEffect, type ReactNode } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from '@/store/auth';
 import { useSettings } from '@/store/settings';
 import { canAccess, firstAllowed } from '@/lib/pages';
 import { AppShell } from '@/components/AppShell';
 import LoginPage from '@/pages/LoginPage';
-import DashboardPage from '@/pages/DashboardPage';
-import ItemsPage from '@/pages/ItemsPage';
-import ProductsPage from '@/pages/ProductsPage';
-import SuppliersPage from '@/pages/SuppliersPage';
-import CustomersPage from '@/pages/CustomersPage';
-import InvoicesPage from '@/pages/InvoicesPage';
-import GrnsPage from '@/pages/GrnsPage';
-import OutstandingPage from '@/pages/OutstandingPage';
-import ReportsPage from '@/pages/ReportsPage';
-import EmployeesPage from '@/pages/EmployeesPage';
-import AttendancePage from '@/pages/AttendancePage';
-import PayrollPage from '@/pages/PayrollPage';
-import UsersPage from '@/pages/UsersPage';
-import SettingsPage from '@/pages/SettingsPage';
+
+// Authenticated pages are code-split: each loads as its own chunk on first
+// visit, so the initial download stays small instead of shipping every page.
+const DashboardPage = lazy(() => import('@/pages/DashboardPage'));
+const ItemsPage = lazy(() => import('@/pages/ItemsPage'));
+const ProductsPage = lazy(() => import('@/pages/ProductsPage'));
+const SuppliersPage = lazy(() => import('@/pages/SuppliersPage'));
+const CustomersPage = lazy(() => import('@/pages/CustomersPage'));
+const InvoicesPage = lazy(() => import('@/pages/InvoicesPage'));
+const GrnsPage = lazy(() => import('@/pages/GrnsPage'));
+const OutstandingPage = lazy(() => import('@/pages/OutstandingPage'));
+const ReportsPage = lazy(() => import('@/pages/ReportsPage'));
+const EmployeesPage = lazy(() => import('@/pages/EmployeesPage'));
+const AttendancePage = lazy(() => import('@/pages/AttendancePage'));
+const PayrollPage = lazy(() => import('@/pages/PayrollPage'));
+const UsersPage = lazy(() => import('@/pages/UsersPage'));
+const SettingsPage = lazy(() => import('@/pages/SettingsPage'));
 
 // Renders the page only if the current user has the permission, else redirects
 // to the first page they can access.
