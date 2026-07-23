@@ -30,7 +30,9 @@ class AuthController extends Controller
             ]);
         }
 
-        Auth::login($user, $request->boolean('remember'));
+        // Never issue the persistent "remember me" cookie — credentials must be
+        // entered again on every fresh open of the system.
+        Auth::login($user, false);
         $request->session()->regenerate();
 
         return response()->json(['user' => self::payload($user)]);

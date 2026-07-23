@@ -4,7 +4,6 @@ import { Lock, User as UserIcon, Eye, EyeOff, Package, ReceiptText, CalendarChec
 import { useAuth } from '@/store/auth';
 import { useSettings } from '@/store/settings';
 import { Button } from '@/components/ui/Button';
-import { Switch } from '@/components/ui/Common';
 import { apiErrorMessage } from '@/lib/http';
 import { alertError } from '@/lib/toast';
 
@@ -28,7 +27,6 @@ export default function LoginPage() {
   const [username, setUsername] = useState('');
   const [pw, setPw] = useState('');
   const [show, setShow] = useState(false);
-  const [remember, setRemember] = useState(true);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -47,7 +45,7 @@ export default function LoginPage() {
     }
     setBusy(true); setErr(null);
     try {
-      await login(username.trim(), pw, remember);
+      await login(username.trim(), pw);
       navigate('/', { replace: true });
     } catch (e2) {
       const msg = friendlyLoginError(apiErrorMessage(e2, 'Login failed'));
@@ -181,9 +179,7 @@ export default function LoginPage() {
             </div>
 
             <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2 text-[13px] cursor-pointer" style={{ color: '#5b6472' }}>
-                <Switch on={remember} onClick={() => setRemember((r) => !r)} /> Remember me
-              </label>
+              <span className="text-[12px]" style={{ color: '#8a93a3' }}>Sign in required on every visit.</span>
               <a href="#" onClick={(e) => e.preventDefault()} className="text-[13px] font-semibold" style={{ color: 'var(--accent)' }}>Forgot password?</a>
             </div>
 

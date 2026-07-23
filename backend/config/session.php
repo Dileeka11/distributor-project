@@ -34,7 +34,10 @@ return [
 
     'lifetime' => (int) env('SESSION_LIFETIME', 120),
 
-    'expire_on_close' => env('SESSION_EXPIRE_ON_CLOSE', false),
+    // Force a fresh login every time the app is opened: the session cookie is
+    // a browser-session cookie (no Max-Age), so it is discarded when the
+    // browser closes. Hardcoded (not env-driven) so live behaviour is certain.
+    'expire_on_close' => true,
 
     /*
     |--------------------------------------------------------------------------
