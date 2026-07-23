@@ -12,6 +12,8 @@ use App\Http\Controllers\GrnController;
 use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\ItemController;
 use App\Http\Controllers\JobRoleController;
+use App\Http\Controllers\LeaveCategoryController;
+use App\Http\Controllers\LeaveController;
 use App\Http\Controllers\PayrollController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\SettingController;
@@ -91,6 +93,17 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/attendance', [AttendanceController::class, 'store']);
     Route::post('/attendance/clock', [AttendanceController::class, 'clock']);
     Route::delete('/attendance/{attendance}', [AttendanceController::class, 'destroy']);
+
+    Route::get('/leave-categories', [LeaveCategoryController::class, 'index']);
+    Route::post('/leave-categories', [LeaveCategoryController::class, 'store']);
+    Route::put('/leave-categories/{leaveCategory}', [LeaveCategoryController::class, 'update']);
+    Route::delete('/leave-categories/{leaveCategory}', [LeaveCategoryController::class, 'destroy']);
+
+    Route::get('/leaves', [LeaveController::class, 'index']);
+    Route::get('/leaves/balances', [LeaveController::class, 'balances']);
+    Route::post('/leaves', [LeaveController::class, 'store']);
+    Route::post('/leaves/{leave}/decide', [LeaveController::class, 'decide']);
+    Route::delete('/leaves/{leave}', [LeaveController::class, 'destroy']);
 
     Route::get('/payrolls', [PayrollController::class, 'index']);
     Route::post('/payrolls/generate', [PayrollController::class, 'generate']);

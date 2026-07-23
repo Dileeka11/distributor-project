@@ -235,7 +235,7 @@ function ProductBuilder({ onClose, onSaved }: { onClose: () => void; onSaved: ()
                       </div>
                     )}
                   </td>
-                  <td className="p-1.5"><Input className="mono text-right" value={l.qty} onChange={(e) => setLine(i, { qty: e.target.value.replace(/\D/g, '') })} onBlur={() => { if (!(Number(l.qty) > 0)) setLine(i, { qty: '1' }); }} style={{ height: 36 }} /></td>
+                  <td className="p-1.5"><Input className="mono text-right" value={l.qty} onChange={(e) => setLine(i, { qty: e.target.value.replace(/\D/g, '') })} style={{ height: 36 }} /></td>
                   <td className="p-1.5"><MoneyInput className="text-right" value={l.price} onChange={(v) => setLine(i, { price: v })} style={{ height: 36 }} /></td>
                   <td className="p-1.5 text-right money font-semibold">{fmt((Number(l.qty) || 0) * (Number(l.price) || 0))}</td>
                   <td className="p-1.5 text-right">

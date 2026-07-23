@@ -274,6 +274,40 @@ export interface Attendance {
   status: string; // present | absent | leave | half-day
 }
 
+export interface LeaveCategory {
+  id: ID;
+  name: string;
+  annual_days: number;   // yearly allowance per employee
+  color: string;
+  active: boolean;
+}
+
+export interface Leave {
+  id: ID;
+  employee_id: ID;
+  employee?: Employee;
+  leave_category_id: ID;
+  category?: LeaveCategory;
+  from_date: string;
+  days: number;
+  description: string | null;
+  status: 'pending' | 'approved' | 'rejected';
+  admin_note: string | null;
+  decided_at: string | null;
+  decided_by?: ID | null;
+  decidedBy?: { id: ID; name: string } | null;
+  created_by?: ID | null;
+}
+
+export interface LeaveBalance {
+  category_id: ID;
+  name: string;
+  color: string;
+  allowance: number;
+  used: number;
+  remaining: number;
+}
+
 export interface Payroll {
   id: ID;
   code: string;

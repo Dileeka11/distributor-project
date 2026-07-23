@@ -43,6 +43,9 @@ class AttendanceController extends Controller
         $now = $data['time'] ?? Carbon::now()->format('H:i:s');
 
         if (! $att->clock_in) {
+            // Recording a check-in (and its time) is admin-only; other users may
+            // only mark the check-out of an already-clocked-in employee.
+            abort_unless((bool) optional($request->user())->is_admin, 403, 'Only an admin can record a check-in.');
             $att->fill(['clock_in' => $now, 'clock_out' => null, 'status' => 'present', 'total_hours' => 0]);
         } elseif (! $att->clock_out) {
             $att->clock_out = $now;
@@ -58,6 +61,9 @@ class AttendanceController extends Controller
     /** Manual create / correct an attendance row for any employee & date. */
     public function store(Request $request): JsonResponse
     {
+        // Manual entry sets the check-in time — admin only.
+        abort_unless((bool) optional($request->user())->is_admin, 403, 'Only an admin can add or correct attendance times.');
+
         $data = $request->validate([
             'employee_id' => ['required', 'exists:employees,id'],
             'date' => ['required', 'date'],

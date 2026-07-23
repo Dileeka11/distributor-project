@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarCheck, LogIn, LogOut, Edit2, Trash2, Clock, FileBarChart2, ChevronLeft, ChevronRight, ChevronDown, Search } from 'lucide-react';
+import { CalendarCheck, LogIn, LogOut, Edit2, Trash2, Clock, FileBarChart2, ChevronLeft, ChevronRight, ChevronDown, Search, CalendarDays } from 'lucide-react';
 import { http, apiErrorMessage } from '@/lib/http';
 import { prettyDate } from '@/lib/format';
 import { toast, confirmDelete } from '@/lib/toast';
@@ -9,6 +9,8 @@ import { Badge } from '@/components/ui/Badge';
 import { Empty, Avatar } from '@/components/ui/Common';
 import { Modal } from '@/components/ui/Modal';
 import { Field, Input, Select } from '@/components/ui/Field';
+import { useAuth } from '@/store/auth';
+import { LeaveCenter } from '@/pages/LeaveCenter';
 import type { Attendance, Employee, JobRole } from '@/types';
 
 const hhmm = (t: string | null) => (t ? String(t).slice(0, 5) : '—');
@@ -22,6 +24,8 @@ const fmtHrs = (dec: number) => {
 const STATUS: Record<string, 'green' | 'amber' | 'red' | 'gray'> = { present: 'green', 'half-day': 'amber', leave: 'amber', absent: 'red' };
 
 export default function AttendancePage() {
+  const { user } = useAuth();
+  const isAdmin = !!user?.is_admin;
   const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD (local)
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [roles, setRoles] = useState<JobRole[]>([]);
@@ -31,10 +35,16 @@ export default function AttendancePage() {
   const [employeeId, setEmployeeId] = useState<number | ''>('');
   const [editing, setEditing] = useState<{ emp: Employee; rec?: Attendance } | null>(null);
   const [reportOpen, setReportOpen] = useState(false);
+  const [leaveOpen, setLeaveOpen] = useState(false);
+  const [leavePending, setLeavePending] = useState(0);
+  // Manual time entry: off = record at the current time; on = use the picked time.
+  const [manualTime, setManualTime] = useState(false);
+  const [pickedTime, setPickedTime] = useState('');
 
   const loadEmployees = () => http.get('/api/employees').then((r) => setEmployees((r.data.data as Employee[]).filter((e) => e.active)));
   const loadRecords = () => http.get('/api/attendance', { params: { date } }).then((r) => setRecords(r.data.data));
-  useEffect(() => { void loadEmployees(); void http.get('/api/job-roles').then((r) => setRoles(r.data.data)); }, []);
+  const loadPending = () => http.get('/api/leaves', { params: { status: 'pending' } }).then((r) => setLeavePending((r.data.data as unknown[]).length)).catch(() => {});
+  useEffect(() => { void loadEmployees(); void http.get('/api/job-roles').then((r) => setRoles(r.data.data)); void loadPending(); }, []);
   useEffect(() => { void loadRecords(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [date]);
 
   const isToday = date === today;
@@ -49,7 +59,10 @@ export default function AttendancePage() {
     try {
       const d = new Date();
       const p = (n: number) => String(n).padStart(2, '0');
-      const time = `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+      // Manual time (HH:MM from the picker) → append :00; else the live time.
+      const time = manualTime && pickedTime
+        ? `${pickedTime}:00`
+        : `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
       const { data } = await http.post('/api/attendance/clock', {
         employee_id: emp.id, date: d.toLocaleDateString('en-CA'), time,
       });
@@ -78,7 +91,14 @@ export default function AttendancePage() {
       <PageHead
         title="Attendance"
         sub="Daily clock-in / clock-out and worked hours per employee."
-        actions={<Button variant="subtle" icon={<FileBarChart2 size={16} />} onClick={() => setReportOpen(true)}>Attendance report</Button>}
+        actions={
+          <>
+            <Button variant="subtle" icon={<CalendarDays size={16} />} onClick={() => setLeaveOpen(true)}>
+              Leave{leavePending > 0 && <span className="ml-1.5 inline-grid place-items-center min-w-[18px] h-[18px] px-1 rounded-full text-[11px] font-bold text-white" style={{ background: 'var(--accent)' }}>{leavePending}</span>}
+            </Button>
+            <Button variant="subtle" icon={<FileBarChart2 size={16} />} onClick={() => setReportOpen(true)}>Attendance report</Button>
+          </>
+        }
       />
 
       <div className="flex gap-2.5 mb-3 items-center flex-wrap">
@@ -94,6 +114,13 @@ export default function AttendancePage() {
         {isToday
           ? <span className="chip" style={{ background: 'var(--green-soft)', color: 'var(--green)' }}>Today — clock-in enabled</span>
           : <Button variant="subtle" onClick={() => setDate(today)}>Back to today</Button>}
+        {isToday && (
+          <label className="flex items-center gap-2 text-[12.5px] cursor-pointer px-2.5 rounded-full border border-border" style={{ height: 36, color: 'var(--text-muted)' }}>
+            <input type="checkbox" checked={manualTime} onChange={(e) => { setManualTime(e.target.checked); if (e.target.checked && !pickedTime) { const d = new Date(); setPickedTime(`${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`); } }} />
+            Manual time
+            {manualTime && <Input type="time" value={pickedTime} onChange={(e) => setPickedTime(e.target.value)} style={{ height: 28, width: 120 }} />}
+          </label>
+        )}
         <LiveClock />
         <div className="flex gap-2">
           <span className="chip">{present} / {shown.length} present</span>
@@ -124,15 +151,16 @@ export default function AttendancePage() {
                   <td>{rec ? <Badge kind={STATUS[rec.status] ?? 'gray'}>{rec.status}</Badge> : <span style={{ color: 'var(--text-faint)' }}>—</span>}</td>
                   <td className="num">
                     <div className="flex gap-1.5 justify-end">
-                      {isToday && !clockedOut && (
+                      {/* Check-in (first tap) is admin-only; check-out any user. */}
+                      {isToday && !clockedOut && (clockedIn || isAdmin) && (
                         <Button variant="primary" size="sm" icon={clockedIn ? <LogOut size={14} /> : <LogIn size={14} />}
                           style={clockedIn ? { background: 'var(--amber)', borderColor: 'var(--amber)' } : undefined}
                           onClick={() => void clock(emp)}>
                           {clockedIn ? 'Clock out' : 'Clock in'}
                         </Button>
                       )}
-                      <Button variant="subtle" size="sm" icon={<Edit2 size={14} />} title="Edit / correct" onClick={() => setEditing({ emp, rec })} />
-                      {rec && <Button variant="subtle" size="sm" icon={<Trash2 size={14} />} onClick={() => void del(rec)} />}
+                      {isAdmin && <Button variant="subtle" size="sm" icon={<Edit2 size={14} />} title="Edit / correct" onClick={() => setEditing({ emp, rec })} />}
+                      {isAdmin && rec && <Button variant="subtle" size="sm" icon={<Trash2 size={14} />} onClick={() => void del(rec)} />}
                     </div>
                   </td>
                 </tr>
@@ -158,6 +186,14 @@ export default function AttendancePage() {
       )}
 
       {reportOpen && <AttendanceReportModal onClose={() => setReportOpen(false)} />}
+
+      {leaveOpen && (
+        <LeaveCenter
+          employees={employees}
+          onClose={() => setLeaveOpen(false)}
+          onChanged={() => { void loadPending(); void loadRecords(); }}
+        />
+      )}
     </div>
   );
 }
