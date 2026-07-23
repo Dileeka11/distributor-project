@@ -59,13 +59,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/invoices', [InvoiceController::class, 'store']);
     Route::get('/invoices/{invoice}', [InvoiceController::class, 'show']);
     Route::put('/invoices/{invoice}', [InvoiceController::class, 'update']);
-    Route::delete('/invoices/{invoice}', [InvoiceController::class, 'destroy']);
+    Route::post('/invoices/{invoice}/cancel', [InvoiceController::class, 'cancel']);
 
     Route::get('/grns', [GrnController::class, 'index']);
     Route::post('/grns', [GrnController::class, 'store']);
     Route::get('/grns/{grn}', [GrnController::class, 'show']);
     Route::put('/grns/{grn}', [GrnController::class, 'update']);
-    Route::delete('/grns/{grn}', [GrnController::class, 'destroy']);
+    Route::post('/grns/{grn}/cancel', [GrnController::class, 'cancel']);
 
     Route::get('/cheques', [ChequeController::class, 'index']);
     Route::post('/cheques/{cheque}/toggle', [ChequeController::class, 'toggle']);

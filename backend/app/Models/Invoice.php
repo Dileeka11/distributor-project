@@ -14,7 +14,7 @@ class Invoice extends Model
     protected $fillable = [
         'no', 'date', 'type', 'customer_id',
         'subtotal', 'cash_discount', 'cheque_discount', 'discount_amount',
-        'tax_rate', 'tax_amount', 'total', 'paid', 'advance', 'status', 'created_by',
+        'tax_rate', 'tax_amount', 'total', 'paid', 'advance', 'status', 'cancelled_at', 'created_by',
     ];
 
     protected $casts = [
@@ -22,6 +22,7 @@ class Invoice extends Model
         'customer_id' => 'integer',
         'created_by' => 'integer',
         'date' => 'date',
+        'cancelled_at' => 'datetime',
         'subtotal' => 'decimal:2',
         'cash_discount' => 'decimal:2',
         'cheque_discount' => 'decimal:2',

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, X, Check, Wallet, Receipt, Clock, ReceiptText, Download, Edit2, Trash2 } from 'lucide-react';
+import { Plus, X, Check, Wallet, Receipt, Clock, ReceiptText, Download, Edit2, Ban } from 'lucide-react';
 import { http, apiErrorMessage } from '@/lib/http';
 import { fmt, fmt0, compact, prettyDate } from '@/lib/format';
 import { toast, confirmDelete } from '@/lib/toast';
@@ -40,9 +40,11 @@ export default function InvoicesPage() {
     if (params.has('create')) { setCreate(true); params.delete('create'); setParams(params, { replace: true }); }
   }, [params, setParams]);
 
-  const cashTotal = rows.filter((i) => i.type === 'cash').reduce((s, i) => s + Number(i.total), 0);
-  const creditTotal = rows.filter((i) => i.type === 'credit').reduce((s, i) => s + Number(i.total), 0);
-  const creditDue = rows.filter((i) => i.type === 'credit').reduce((s, i) => s + (Number(i.total) - Number(i.paid)), 0);
+  // Cancelled invoices are void — never counted in any total.
+  const live = rows.filter((i) => !i.cancelled_at);
+  const cashTotal = live.filter((i) => i.type === 'cash').reduce((s, i) => s + Number(i.total), 0);
+  const creditTotal = live.filter((i) => i.type === 'credit').reduce((s, i) => s + Number(i.total), 0);
+  const creditDue = live.filter((i) => i.type === 'credit').reduce((s, i) => s + (Number(i.total) - Number(i.paid)), 0);
 
   return (
     <div className="fade-in">
@@ -53,8 +55,8 @@ export default function InvoicesPage() {
       />
 
       <div className="grid grid-cols-3 gap-4 mb-6">
-        <Stat label="Cash sales" cur="Rs" value={compact(cashTotal)} icon={<Wallet size={18} />} tint="blue" foot={`${rows.filter((i) => i.type === 'cash').length} invoices`} />
-        <Stat label="Credit sales" cur="Rs" value={compact(creditTotal)} icon={<Receipt size={18} />} tint="amber" foot={`${rows.filter((i) => i.type === 'credit').length} invoices`} />
+        <Stat label="Cash sales" cur="Rs" value={compact(cashTotal)} icon={<Wallet size={18} />} tint="blue" foot={`${live.filter((i) => i.type === 'cash').length} invoices`} />
+        <Stat label="Credit sales" cur="Rs" value={compact(creditTotal)} icon={<Receipt size={18} />} tint="amber" foot={`${live.filter((i) => i.type === 'credit').length} invoices`} />
         <Stat label="Credit outstanding" cur="Rs" value={compact(creditDue)} icon={<Clock size={18} />} tint="red" foot="awaiting settlement" />
       </div>
 
@@ -69,24 +71,27 @@ export default function InvoicesPage() {
           <tbody>
             {rows.map((inv) => {
               const st = statusBadge(inv.status);
+              const cancelled = !!inv.cancelled_at;
               const bal = Number(inv.total) - Number(inv.paid);
               return (
-                <tr key={inv.id} className="row-click" onClick={() => setView(inv)}>
+                <tr key={inv.id} className="row-click" onClick={() => setView(inv)} style={cancelled ? { opacity: 0.6 } : undefined}>
                   <td className="mono font-semibold">{inv.no}</td>
                   <td className="text-[12px] whitespace-nowrap" style={{ color: 'var(--text-muted)' }}>{prettyDate(inv.date)}</td>
                   <td className="font-semibold">{inv.customer?.name ?? '—'}</td>
                   <td><Badge kind={inv.type === 'cash' ? 'blue' : 'amber'}>{inv.type === 'cash' ? 'Cash' : 'Credit'}</Badge></td>
-                  <td className="num money font-bold">{fmt(inv.total as number)}</td>
-                  <td className="num money" style={{ color: bal > 0 ? 'var(--red)' : 'var(--text-faint)' }}>{bal > 0 ? fmt(bal) : '—'}</td>
-                  <td><Badge kind={st.kind} dot>{st.label}</Badge></td>
+                  <td className="num money font-bold" style={cancelled ? { textDecoration: 'line-through' } : undefined}>{fmt(inv.total as number)}</td>
+                  <td className="num money" style={{ color: !cancelled && bal > 0 ? 'var(--red)' : 'var(--text-faint)' }}>{!cancelled && bal > 0 ? fmt(bal) : '—'}</td>
+                  <td>{cancelled ? <Badge kind="gray" dot>Cancelled</Badge> : <Badge kind={st.kind} dot>{st.label}</Badge>}</td>
                   <td className="num" onClick={(e) => e.stopPropagation()}>
                     <div className="flex gap-1.5 justify-end">
-                      <Button variant="subtle" size="sm" icon={<Edit2 size={14} />} onClick={() => setEditInv(inv)} />
-                      <Button variant="subtle" size="sm" icon={<Trash2 size={14} />} onClick={async () => {
-                        if (!(await confirmDelete({ title: 'Delete invoice?', html: `Delete <b>${inv.no}</b>? Item stock will be restored${inv.type === 'credit' ? " and the customer's outstanding reversed" : ''}.` }))) return;
-                        try { await http.delete(`/api/invoices/${inv.id}`); toast('Invoice deleted'); void load(); }
-                        catch (e) { toast(apiErrorMessage(e), 'err'); }
-                      }} />
+                      {!cancelled && <Button variant="subtle" size="sm" icon={<Edit2 size={14} />} title="Edit" onClick={() => setEditInv(inv)} />}
+                      {!cancelled && (
+                        <Button variant="subtle" size="sm" icon={<Ban size={14} />} title="Cancel invoice" onClick={async () => {
+                          if (!(await confirmDelete({ title: 'Cancel invoice?', confirmText: 'Yes, cancel it', html: `Cancel <b>${inv.no}</b>? Item stock will be restored${inv.type === 'credit' ? ", the customer's outstanding reversed" : ''} and any recorded receipts removed. The invoice stays in the list marked Cancelled.` }))) return;
+                          try { await http.post(`/api/invoices/${inv.id}/cancel`); toast('Invoice cancelled'); void load(); }
+                          catch (e) { toast(apiErrorMessage(e), 'err'); }
+                        }} />
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -166,6 +171,7 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
     void http.get(`/api/items/${itemId}/batches`).then((r) => setBatchesByItem((m) => ({ ...m, [itemId]: r.data.data })));
   };
   const batchesFor = (l: DraftLine) => (l.item_id ? batchesByItem[Number(l.item_id)] ?? [] : []);
+  const batchFor = (l: DraftLine) => batchesFor(l).find((b) => Number(b.id) === l.batch_id);
 
   const cust = customers.find((c) => Number(c.id) === customerId);
   const cashPct = cust ? Number(cust.cash_discount) : 0;
@@ -194,11 +200,30 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
   // Out-of-stock items can't be sold — keep them out of the picker (except a
   // line's already-selected item when editing an old invoice).
   const pickableItems = (l: DraftLine) => items.filter((x) => Number(x.stock) > 0 || Number(x.id) === l.item_id);
+
+  // Qty of an item / cost-batch already committed on the OTHER invoice lines, so
+  // each line shows the stock that is still live after the earlier lines.
+  const usedElsewhere = (itemId: number | '', exceptIdx: number) =>
+    itemId === '' ? 0 : lines.reduce((s, l, idx) => s + (idx !== exceptIdx && Number(l.item_id) === Number(itemId) ? (Number(l.qty) || 0) : 0), 0);
+  const batchUsedElsewhere = (batchId: number | '', exceptIdx: number) =>
+    batchId === '' ? 0 : lines.reduce((s, l, idx) => s + (idx !== exceptIdx && Number(l.batch_id) === Number(batchId) ? (Number(l.qty) || 0) : 0), 0);
+  // Stock still available for one line = item (or chosen batch) stock minus what
+  // the other lines already took.
+  const lineCap = (l: DraftLine, idx: number) => {
+    const it = items.find((x) => Number(x.id) === l.item_id);
+    if (!it) return Infinity;
+    const batch = batchFor(l);
+    return batch
+      ? Number(batch.qty_remaining) - batchUsedElsewhere(l.batch_id, idx)
+      : Number(it.stock) - usedElsewhere(l.item_id, idx);
+  };
   const addLine = () => setLines((ls) => [...ls, blankLine()]);
   const delLine = (i: number) => setLines((ls) => (ls.length > 1 ? ls.filter((_, idx) => idx !== i) : ls));
 
   const validLines = lines.filter((l) => l.item_id !== '' && Number(l.qty) > 0 && (batchesFor(l).length === 0 || l.batch_id !== ''));
-  const canSave = customerId !== '' && validLines.length > 0 && !busy;
+  // No line (nor the running total for a repeated item) may exceed live stock.
+  const overStock = lines.some((l, i) => l.item_id !== '' && Number(l.qty) > 0 && Number(l.qty) > lineCap(l, i));
+  const canSave = customerId !== '' && validLines.length > 0 && !overStock && !busy;
 
   const save = async () => {
     if (!canSave) return;
@@ -292,6 +317,9 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
           <tbody>
             {lines.map((l, i) => {
               const it = items.find((x) => Number(x.id) === l.item_id);
+              const batch = batchFor(l);
+              const cap = it ? lineCap(l, i) : 0;              // stock left for this line
+              const short = it ? (Number(l.qty) || 0) > cap : false;
               return (
                 <tr key={i} className="border-t border-border">
                   <td className="p-1.5">
@@ -301,23 +329,24 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
                       onChange={(v) => pickItem(i, v)}
                       allLabel="Select item…"
                       placeholder="Search item name or code…"
-                      subtitle={(x) => `${x.code} · stock ${fmt0(Number(x.stock))}`}
+                      subtitle={(x) => `${x.code} · stock ${fmt0(Number(x.stock) - usedElsewhere(x.id, i))}`}
                     />
                     {batchesFor(l).length > 0 && (
                       <Select value={l.batch_id === '' ? '' : String(l.batch_id)} onChange={(e) => setLine(i, { batch_id: e.target.value ? Number(e.target.value) : '' })} style={{ height: 32, fontSize: 12, marginTop: 6 }}>
                         <option value="">Select cost-batch…</option>
-                        {batchesFor(l).map((b) => <option key={b.id} value={b.id}>Cost Rs {fmt(b.unit_cost as number)} · {b.qty_remaining} left</option>)}
+                        {batchesFor(l).map((b) => <option key={b.id} value={b.id}>Cost Rs {fmt(b.unit_cost as number)} · {fmt0(Number(b.qty_remaining) - batchUsedElsewhere(b.id, i))} left</option>)}
                       </Select>
                     )}
                     {it && (
-                      <div className="text-[12px] mt-1" style={{ color: 'var(--text-muted)' }}>
-                        Stock: {fmt0(it.stock)} · {it.product
+                      <div className="text-[12px] mt-1" style={{ color: short ? 'var(--red)' : 'var(--text-muted)' }}>
+                        Stock: {fmt0(cap)} left{batch ? ' (this batch)' : ''} · {it.product
                           ? <>Actual Rs {fmt(Number(it.product.actual_price))}</>
                           : <>WP Rs {fmt(it.wholesale_price as number)}</>}
+                        {short ? ` — only ${fmt0(cap)} available` : ''}
                       </div>
                     )}
                   </td>
-                  <td className="p-1.5"><Input className="mono text-right" value={l.qty} onChange={(e) => setLine(i, { qty: e.target.value.replace(/\D/g, '') })} style={{ height: 36 }} /></td>
+                  <td className="p-1.5"><Input className="mono text-right" value={l.qty} onChange={(e) => setLine(i, { qty: e.target.value.replace(/\D/g, '') })} style={{ height: 36, borderColor: short ? 'var(--red)' : undefined }} /></td>
                   <td className="p-1.5"><MoneyInput className="text-right" value={l.price} onChange={(v) => setLine(i, { price: v })} style={{ height: 36 }} /></td>
                   <td className="p-1.5 text-right money font-semibold">{fmt((Number(l.qty) || 0) * (Number(l.price) || 0))}</td>
                   <td className="p-1.5 text-right">

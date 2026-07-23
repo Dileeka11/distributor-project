@@ -218,6 +218,7 @@ class ChequeController extends Controller
         $unpaid = (float) Invoice::query()
             ->where('customer_id', $customerId)
             ->where('type', 'credit')
+            ->whereNull('cancelled_at')
             ->selectRaw('COALESCE(SUM(GREATEST(total - paid, 0)), 0) AS v')
             ->value('v');
         Customer::query()->whereKey($customerId)->update(['balance' => round($unpaid, 2)]);
@@ -229,6 +230,7 @@ class ChequeController extends Controller
         $unpaid = (float) Grn::query()
             ->where('supplier_id', $supplierId)
             ->where('type', 'credit')
+            ->whereNull('cancelled_at')
             ->selectRaw('COALESCE(SUM(GREATEST(total - paid, 0)), 0) AS v')
             ->value('v');
         Supplier::query()->whereKey($supplierId)->update(['payable' => round($unpaid, 2)]);

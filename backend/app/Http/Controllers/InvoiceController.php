@@ -65,6 +65,8 @@ class InvoiceController extends Controller
 
     public function update(StoreInvoiceRequest $request, Invoice $invoice): JsonResponse
     {
+        abort_if((bool) $invoice->cancelled_at, 422, 'This invoice is cancelled and can no longer be edited.');
+
         // Editing re-applies the invoice from scratch (paid resets to the advance),
         // which would wipe any collections / cleared cheques recorded against it.
         // Block it once money has been collected beyond the up-front advance.
@@ -90,18 +92,28 @@ class InvoiceController extends Controller
         ]);
     }
 
-    public function destroy(Invoice $invoice, SettlementService $posting): JsonResponse
+    /**
+     * Cancel an invoice: reverse its stock + receivable (and any receipts posted
+     * against it), but keep the record marked cancelled for the audit trail.
+     */
+    public function cancel(Invoice $invoice, SettlementService $posting): JsonResponse
     {
+        abort_if((bool) $invoice->cancelled_at, 422, 'This invoice is already cancelled.');
+
         DB::transaction(function () use ($invoice, $posting) {
-            // Auto-remove receipts recorded against this invoice, restoring its
-            // paid amount first so the receivable reversal below is exact.
             $posting->purgeSettlementsForInvoice($invoice);
             $invoice->refresh();
-            $this->reverseInvoiceEffects($invoice);
-            $invoice->delete(); // lines + cheques cascade
+            $this->reverseInvoiceEffects($invoice); // restores item stock + reverses receivable
+            $invoice->cheques()->delete();          // record-only cheques no longer apply
+            $invoice->fill([
+                'cancelled_at' => now(),
+                'paid' => 0,
+                'advance' => 0,
+                'status' => 'unpaid',
+            ])->save();
         });
 
-        return response()->json(['message' => 'Invoice deleted']);
+        return response()->json(['data' => $invoice->fresh(['customer', 'lines'])]);
     }
 
     /**

@@ -108,6 +108,7 @@ export interface Invoice {
   paid: string | number;
   advance?: string | number; // up-front amount paid now (stable; excludes later collections)
   status: TxnStatus;
+  cancelled_at?: string | null;
   lines?: InvoiceLine[];
   cheques?: Cheque[];
 }
@@ -172,6 +173,7 @@ export interface Grn {
   paid: string | number;
   advance?: string | number; // up-front amount paid now (stable; excludes later payments)
   status: TxnStatus;
+  cancelled_at?: string | null;
   lines?: GrnLine[];
   cheques?: Cheque[];
 }

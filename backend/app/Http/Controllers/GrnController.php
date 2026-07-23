@@ -65,6 +65,8 @@ class GrnController extends Controller
 
     public function update(StoreGrnRequest $request, Grn $grn): JsonResponse
     {
+        abort_if((bool) $grn->cancelled_at, 422, 'This GRN is cancelled and can no longer be edited.');
+
         // Editing re-applies the GRN from scratch (paid resets to the advance),
         // which would wipe any payments / cleared cheques recorded against it.
         // Block it once money has been collected beyond the up-front advance.
@@ -90,18 +92,29 @@ class GrnController extends Controller
         ]);
     }
 
-    public function destroy(Grn $grn, SettlementService $posting): JsonResponse
+    /**
+     * Cancel a GRN: remove the received stock + reverse the payable (and any
+     * payments posted against it), but keep the record marked cancelled.
+     * Blocked if any received stock was already sold on an invoice.
+     */
+    public function cancel(Grn $grn, SettlementService $posting): JsonResponse
     {
+        abort_if((bool) $grn->cancelled_at, 422, 'This GRN is already cancelled.');
+
         DB::transaction(function () use ($grn, $posting) {
-            // Auto-remove payments recorded against this GRN, restoring its paid
-            // amount first so the payable reversal below is exact.
             $posting->purgeSettlementsForGrn($grn);
             $grn->refresh();
-            $this->reverseGrnEffects($grn);
-            $grn->delete(); // lines + cheques cascade
+            $this->reverseGrnEffects($grn); // removes received stock + batches, reverses payable
+            $grn->cheques()->delete();      // record-only cheques no longer apply
+            $grn->fill([
+                'cancelled_at' => now(),
+                'paid' => 0,
+                'advance' => 0,
+                'status' => 'unpaid',
+            ])->save();
         });
 
-        return response()->json(['message' => 'GRN deleted']);
+        return response()->json(['data' => $grn->fresh(['supplier', 'lines'])]);
     }
 
     /**

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, X, Check, Truck, Wallet, PackageOpen, Clock, Box, Edit2, Trash2, Eye, Printer } from 'lucide-react';
+import { Plus, X, Check, Truck, Wallet, PackageOpen, Clock, Box, Edit2, Ban, Eye, Printer } from 'lucide-react';
 import { http, apiErrorMessage } from '@/lib/http';
 import { fmt, fmt0, compact, prettyDate } from '@/lib/format';
 import { toast, confirmDelete } from '@/lib/toast';
@@ -176,9 +176,11 @@ export default function GrnsPage() {
     } catch (e) { toast(apiErrorMessage(e), 'err'); }
   };
 
-  const cashTotal = rows.filter((g) => g.type === 'cash').reduce((s, g) => s + Number(g.total), 0);
-  const creditTotal = rows.filter((g) => g.type === 'credit').reduce((s, g) => s + Number(g.total), 0);
-  const creditDue = rows.filter((g) => g.type === 'credit').reduce((s, g) => s + (Number(g.total) - Number(g.paid)), 0);
+  // Cancelled GRNs are void — never counted in any total.
+  const live = rows.filter((g) => !g.cancelled_at);
+  const cashTotal = live.filter((g) => g.type === 'cash').reduce((s, g) => s + Number(g.total), 0);
+  const creditTotal = live.filter((g) => g.type === 'credit').reduce((s, g) => s + Number(g.total), 0);
+  const creditDue = live.filter((g) => g.type === 'credit').reduce((s, g) => s + (Number(g.total) - Number(g.paid)), 0);
 
   return (
     <div className="fade-in">
@@ -189,8 +191,8 @@ export default function GrnsPage() {
       />
 
       <div className="grid grid-cols-3 gap-4 mb-6">
-        <Stat label="Cash purchases" cur="Rs" value={compact(cashTotal)} icon={<Wallet size={18} />} tint="blue" foot={`${rows.filter((g) => g.type === 'cash').length} GRNs`} />
-        <Stat label="Credit purchases" cur="Rs" value={compact(creditTotal)} icon={<PackageOpen size={18} />} tint="amber" foot={`${rows.filter((g) => g.type === 'credit').length} GRNs`} />
+        <Stat label="Cash purchases" cur="Rs" value={compact(cashTotal)} icon={<Wallet size={18} />} tint="blue" foot={`${live.filter((g) => g.type === 'cash').length} GRNs`} />
+        <Stat label="Credit purchases" cur="Rs" value={compact(creditTotal)} icon={<PackageOpen size={18} />} tint="amber" foot={`${live.filter((g) => g.type === 'credit').length} GRNs`} />
         <Stat label="Payable outstanding" cur="Rs" value={compact(creditDue)} icon={<Clock size={18} />} tint="red" foot="owed to suppliers" />
       </div>
 
@@ -205,9 +207,10 @@ export default function GrnsPage() {
           <tbody>
             {rows.map((g) => {
               const st = statusBadge(g.status);
+              const cancelled = !!g.cancelled_at;
               const bal = Number(g.total) - Number(g.paid);
               return (
-                <tr key={g.id} className="row-click" onClick={() => setView(g)}>
+                <tr key={g.id} className="row-click" onClick={() => setView(g)} style={cancelled ? { opacity: 0.6 } : undefined}>
                   <td className="mono font-semibold">{g.no}</td>
                   <td className="text-[12px] whitespace-nowrap" style={{ color: 'var(--text-muted)' }}>{prettyDate(g.date)}</td>
                   <td>
@@ -217,19 +220,21 @@ export default function GrnsPage() {
                     </div>
                   </td>
                   <td><Badge kind={g.type === 'cash' ? 'blue' : 'amber'}>{g.type === 'cash' ? 'Cash' : 'Credit'}</Badge></td>
-                  <td className="num money font-bold">{fmt(g.total as number)}</td>
-                  <td className="num money" style={{ color: bal > 0 ? 'var(--red)' : 'var(--text-faint)' }}>{bal > 0 ? fmt(bal) : '—'}</td>
-                  <td><Badge kind={st.kind} dot>{st.label}</Badge></td>
+                  <td className="num money font-bold" style={cancelled ? { textDecoration: 'line-through' } : undefined}>{fmt(g.total as number)}</td>
+                  <td className="num money" style={{ color: !cancelled && bal > 0 ? 'var(--red)' : 'var(--text-faint)' }}>{!cancelled && bal > 0 ? fmt(bal) : '—'}</td>
+                  <td>{cancelled ? <Badge kind="gray" dot>Cancelled</Badge> : <Badge kind={st.kind} dot>{st.label}</Badge>}</td>
                   <td className="num" onClick={(e) => e.stopPropagation()}>
                     <div className="flex gap-1.5 justify-end">
                       <Button variant="subtle" size="sm" icon={<Eye size={14} />} title="View GRN" onClick={() => setView(g)} />
                       <Button variant="subtle" size="sm" icon={<Printer size={14} />} title="Print / PDF" onClick={() => void printGrn(g)} />
-                      <Button variant="subtle" size="sm" icon={<Edit2 size={14} />} onClick={() => setEditGrn(g)} />
-                      <Button variant="subtle" size="sm" icon={<Trash2 size={14} />} onClick={async () => {
-                        if (!(await confirmDelete({ title: 'Delete GRN?', html: `Delete <b>${g.no}</b>? Received stock will be removed${g.type === 'credit' ? " and the supplier's payable reversed" : ''}.` }))) return;
-                        try { await http.delete(`/api/grns/${g.id}`); toast('GRN deleted'); void load(); }
-                        catch (e) { toast(apiErrorMessage(e), 'err'); }
-                      }} />
+                      {!cancelled && <Button variant="subtle" size="sm" icon={<Edit2 size={14} />} title="Edit" onClick={() => setEditGrn(g)} />}
+                      {!cancelled && (
+                        <Button variant="subtle" size="sm" icon={<Ban size={14} />} title="Cancel GRN" onClick={async () => {
+                          if (!(await confirmDelete({ title: 'Cancel GRN?', confirmText: 'Yes, cancel it', html: `Cancel <b>${g.no}</b>? Received stock will be removed${g.type === 'credit' ? ", the supplier's payable reversed" : ''} and any recorded payments removed. The GRN stays in the list marked Cancelled.` }))) return;
+                          try { await http.post(`/api/grns/${g.id}/cancel`); toast('GRN cancelled'); void load(); }
+                          catch (e) { toast(apiErrorMessage(e), 'err'); }
+                        }} />
+                      )}
                     </div>
                   </td>
                 </tr>

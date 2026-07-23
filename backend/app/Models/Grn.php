@@ -15,7 +15,7 @@ class Grn extends Model
 
     protected $fillable = [
         'no', 'date', 'type', 'supplier_id',
-        'subtotal', 'tax_rate', 'tax_amount', 'total', 'paid', 'advance', 'status', 'created_by',
+        'subtotal', 'tax_rate', 'tax_amount', 'total', 'paid', 'advance', 'status', 'cancelled_at', 'created_by',
     ];
 
     protected $casts = [
@@ -23,6 +23,7 @@ class Grn extends Model
         'supplier_id' => 'integer',
         'created_by' => 'integer',
         'date' => 'date',
+        'cancelled_at' => 'datetime',
         'subtotal' => 'decimal:2',
         'tax_rate' => 'decimal:2',
         'tax_amount' => 'decimal:2',

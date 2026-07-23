@@ -16,9 +16,10 @@ class DashboardController extends Controller
 {
     public function index(): JsonResponse
     {
-        $totalSales = (float) Invoice::query()->sum('total');
-        $cashTotal = (float) Invoice::query()->where('type', 'cash')->sum('total');
-        $creditTotal = (float) Invoice::query()->where('type', 'credit')->sum('total');
+        // Cancelled invoices are void — excluded from every sales figure.
+        $totalSales = (float) Invoice::query()->whereNull('cancelled_at')->sum('total');
+        $cashTotal = (float) Invoice::query()->whereNull('cancelled_at')->where('type', 'cash')->sum('total');
+        $creditTotal = (float) Invoice::query()->whereNull('cancelled_at')->where('type', 'credit')->sum('total');
         // Outstanding from customers = opening (credit_limit) + invoice balance,
         // matching the Outstanding page.
         $receivable = (float) Customer::query()->sum(DB::raw('credit_limit + balance'));
@@ -28,6 +29,7 @@ class DashboardController extends Controller
             ->limit(10)->get(['id', 'code', 'name', 'stock']);
 
         $recent = Invoice::query()
+            ->whereNull('cancelled_at')
             ->with('customer:id,name')
             ->orderByDesc('date')->orderByDesc('id')
             ->limit(6)->get();
@@ -99,6 +101,7 @@ class DashboardController extends Controller
         $end = $start->copy()->endOfMonth();
 
         $daily = Invoice::query()
+            ->whereNull('cancelled_at')
             ->whereBetween('date', [$start->toDateString(), $end->toDateString()])
             ->selectRaw('date, type, SUM(total) as total')
             ->groupBy('date', 'type')
