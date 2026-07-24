@@ -189,10 +189,9 @@ class InvoiceController extends Controller
             ];
         }
 
-        // Cash / cheque discounts applied independently. Rates come from the
-        // customer record (not the client); each tick toggles its own discount.
-        $cashRate = ! empty($data['cash_discount']) ? (float) $customer->cash_discount : 0.0;
-        $chequeRate = ! empty($data['cheque_discount']) ? (float) $customer->cheque_discount : 0.0;
+        // Cash / cheque discounts applied independently. Rates come from the client request.
+        $cashRate = isset($data['cash_discount']) ? (float) $data['cash_discount'] : 0.0;
+        $chequeRate = isset($data['cheque_discount']) ? (float) $data['cheque_discount'] : 0.0;
         $discountAmount = round(round($subtotal * $cashRate / 100, 2) + round($subtotal * $chequeRate / 100, 2), 2);
         $taxable = round($subtotal - $discountAmount, 2);
         $taxAmount = round($taxable * $taxRate / 100, 2);

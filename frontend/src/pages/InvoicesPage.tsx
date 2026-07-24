@@ -139,11 +139,12 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
   const settingsTax = Number(settings.tax_rate ?? 0);
   const [taxOn, setTaxOn] = useState(false);
   const isEdit = !!editInvoice;
-
   const [type, setType] = useState<'cash' | 'credit'>('cash');
   const [customerId, setCustomerId] = useState<number | ''>('');
   const [discCash, setDiscCash] = useState(false);
   const [discCheque, setDiscCheque] = useState(false);
+  const [cashPctVal, setCashPctVal] = useState('0');
+  const [chequePctVal, setChequePctVal] = useState('0');
   const [lines, setLines] = useState<DraftLine[]>([blankLine()]);
   const [paid, setPaid] = useState('');
   const [cheques, setCheques] = useState<ChequeRow[]>([]);
@@ -157,7 +158,9 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
       setType(d.type);
       setCustomerId(Number(d.customer_id));
       setDiscCash(Number(d.cash_discount) > 0);
+      setCashPctVal(String(Number(d.cash_discount ?? 0)));
       setDiscCheque(Number(d.cheque_discount) > 0);
+      setChequePctVal(String(Number(d.cheque_discount ?? 0)));
       setTaxOn(Number(d.tax_rate) > 0);
       setLines((d.lines ?? []).map((l) => ({ item_id: Number(l.item_id), batch_id: l.batch_id ? Number(l.batch_id) : '', qty: String(Number(l.qty)), price: String(Number(l.price)) })));
       (d.lines ?? []).forEach((l) => loadBatches(Number(l.item_id)));
@@ -190,13 +193,19 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
   const batchFor = (l: DraftLine) => batchesFor(l).find((b) => Number(b.id) === l.batch_id);
 
   const cust = customers.find((c) => Number(c.id) === customerId);
-  const cashPct = cust ? Number(cust.cash_discount) : 0;
-  const chequePct = cust ? Number(cust.cheque_discount) : 0;
+
+  useEffect(() => {
+    if (cust && !isEdit) {
+      setCashPctVal(String(Number(cust.cash_discount ?? 0)));
+      setChequePctVal(String(Number(cust.cheque_discount ?? 0)));
+    }
+  }, [customerId, cust, isEdit]);
+
 
   const totals = useMemo(() => {
     const subtotal = lines.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.price) || 0), 0);
-    const cashAmt = (subtotal * (discCash ? cashPct : 0)) / 100;
-    const chequeAmt = (subtotal * (discCheque ? chequePct : 0)) / 100;
+    const cashAmt = (subtotal * (discCash ? Number(cashPctVal) || 0 : 0)) / 100;
+    const chequeAmt = (subtotal * (discCheque ? Number(chequePctVal) || 0 : 0)) / 100;
     const discountAmt = cashAmt + chequeAmt;
     const taxable = subtotal - discountAmt;
     const taxAmt = (taxable * taxRate) / 100;
@@ -204,7 +213,7 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
     const paidNum = type === 'cash' ? total : Math.min(Number(paid) || 0, total);
     const balance = total - paidNum;
     return { subtotal, cashAmt, chequeAmt, discountAmt, taxable, taxAmt, total, paidNum, balance };
-  }, [lines, taxRate, type, paid, discCash, discCheque, cashPct, chequePct]);
+  }, [lines, taxRate, type, paid, discCash, discCheque, cashPctVal, chequePctVal]);
 
   const setLine = (i: number, patch: Partial<DraftLine>) =>
     setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
@@ -256,7 +265,9 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
     setBusy(true);
     try {
       const payload = {
-        type, customer_id: customerId, tax_rate: taxRate, cash_discount: discCash, cheque_discount: discCheque,
+        type, customer_id: customerId, tax_rate: taxRate,
+        cash_discount: discCash ? Number(cashPctVal) || 0 : 0,
+        cheque_discount: discCheque ? Number(chequePctVal) || 0 : 0,
         paid: type === 'cash' ? totals.total : Number(paid) || 0,
         lines: validLines.map((l) => ({ item_id: l.item_id, batch_id: l.batch_id || null, qty: Number(l.qty), price: Number(l.price) })),
         cheques: type === 'credit'
@@ -309,7 +320,7 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-4 mb-5">
+      <div className="mb-5" style={{ maxWidth: 440 }}>
         <Field label="Customer" req hint="Who is buying">
           <SearchSelect
             items={customers}
@@ -319,12 +330,6 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
             placeholder="Search name, code or mobile…"
             subtitle={(c) => `${c.code}${c.phone ? ` · ${c.phone}` : ''}`}
           />
-        </Field>
-        <Field label="Discount" hint="Tick to apply the customer's cash and / or cheque discount.">
-          <div className="flex flex-col gap-2 pt-1.5">
-            <DiscountTick label="Cash discount" pct={cashPct} on={discCash} disabled={!cust || cashPct <= 0} onToggle={() => setDiscCash((v) => !v)} />
-            <DiscountTick label="Cheque discount" pct={chequePct} on={discCheque} disabled={!cust || chequePct <= 0} onToggle={() => setDiscCheque((v) => !v)} />
-          </div>
         </Field>
       </div>
 
@@ -405,6 +410,72 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
 
       <div className="grid grid-cols-2 gap-5">
         <div>
+          <Field label="Discount" hint="Apply cash and / or cheque discount.">
+            <div className="flex flex-col gap-2.5 mt-2 p-3 rounded-[10px] border border-border bg-surface">
+              {/* Cash Discount Option */}
+              <div className="flex items-center justify-between gap-4">
+                <button
+                  type="button"
+                  onClick={() => setDiscCash(!discCash)}
+                  disabled={!cust}
+                  className="flex items-center gap-2.5 text-left disabled:opacity-45"
+                >
+                  <span
+                    className="grid place-items-center w-[18px] h-[18px] rounded-[5px] border flex-shrink-0 transition"
+                    style={{ background: discCash ? 'var(--accent)' : 'var(--surface)', borderColor: discCash ? 'var(--accent)' : 'var(--border-strong)' }}
+                  >
+                    {discCash && <Check size={13} color="white" strokeWidth={3} />}
+                  </span>
+                  <span className="text-[13.5px] font-medium">Cash discount</span>
+                </button>
+                {discCash && (
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <Input
+                      type="text"
+                      className="mono text-right py-0.5 px-2"
+                      style={{ width: 70, height: 28 }}
+                      value={cashPctVal}
+                      onChange={(e) => setCashPctVal(e.target.value.replace(/[^\d.]/g, ''))}
+                    />
+                    <span className="text-[13px] font-semibold text-muted">%</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Cheque Discount Option */}
+              <div className="flex items-center justify-between gap-4">
+                <button
+                  type="button"
+                  onClick={() => setDiscCheque(!discCheque)}
+                  disabled={!cust}
+                  className="flex items-center gap-2.5 text-left disabled:opacity-45"
+                >
+                  <span
+                    className="grid place-items-center w-[18px] h-[18px] rounded-[5px] border flex-shrink-0 transition"
+                    style={{ background: discCheque ? 'var(--accent)' : 'var(--surface)', borderColor: discCheque ? 'var(--accent)' : 'var(--border-strong)' }}
+                  >
+                    {discCheque && <Check size={13} color="white" strokeWidth={3} />}
+                  </span>
+                  <span className="text-[13.5px] font-medium">Cheque discount</span>
+                </button>
+                {discCheque && (
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <Input
+                      type="text"
+                      className="mono text-right py-0.5 px-2"
+                      style={{ width: 70, height: 28 }}
+                      value={chequePctVal}
+                      onChange={(e) => setChequePctVal(e.target.value.replace(/[^\d.]/g, ''))}
+                    />
+                    <span className="text-[13px] font-semibold text-muted">%</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </Field>
+
+          <div className="h-4" />
+
           {type === 'credit' && (
             <Field label="Advance / amount paid now (LKR)" hint="Remaining goes to outstanding.">
               <MoneyInput value={paid} onChange={setPaid} />
@@ -444,8 +515,8 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
         </div>
         <div className="rounded-[10px] p-4" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
           <TotalRow k="Subtotal" v={fmt(totals.subtotal)} />
-          {totals.cashAmt > 0 && <TotalRow k={`Cash discount (${cashPct}%)`} v={`-${fmt(totals.cashAmt)}`} />}
-          {totals.chequeAmt > 0 && <TotalRow k={`Cheque discount (${chequePct}%)`} v={`-${fmt(totals.chequeAmt)}`} />}
+          {totals.cashAmt > 0 && <TotalRow k="Cash discount" v={`-${fmt(totals.cashAmt)}`} />}
+          {totals.chequeAmt > 0 && <TotalRow k="Cheque discount" v={`-${fmt(totals.chequeAmt)}`} />}
           {/* Tax row only exists when tax is actually applied. */}
           {taxRate > 0 && <TotalRow k={`Tax / VAT (${taxRate}%)`} v={fmt(totals.taxAmt)} />}
           <div className="h-px my-2.5" style={{ background: 'var(--border)' }} />
@@ -460,28 +531,7 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
   );
 }
 
-function DiscountTick({ label, pct, on, disabled, onToggle }: {
-  label: string; pct: number; on: boolean; disabled?: boolean; onToggle: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      disabled={disabled}
-      className="flex items-center gap-2.5 text-left disabled:opacity-45 disabled:cursor-not-allowed"
-    >
-      <span
-        className="grid place-items-center w-[18px] h-[18px] rounded-[5px] border flex-shrink-0 transition"
-        style={{ background: on ? 'var(--accent)' : 'var(--surface)', borderColor: on ? 'var(--accent)' : 'var(--border-strong)' }}
-      >
-        {on && <Check size={13} color="white" strokeWidth={3} />}
-      </span>
-      <span className="text-[13.5px]">
-        {label} <span className="mono font-semibold" style={{ color: 'var(--text-muted)' }}>({pct}%)</span>
-      </span>
-    </button>
-  );
-}
+
 
 export function TotalRow({ k, v, big, accent }: { k: string; v: string; big?: boolean; accent?: boolean }) {
   return (
@@ -554,8 +604,8 @@ function ViewInvoice({ inv, onClose }: { inv: Invoice; onClose: () => void }) {
       <div className="flex justify-end">
         <div className="w-[280px] rounded-[10px] p-4" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
           <TotalRow k="Subtotal" v={fmt(data.subtotal as number)} />
-          {Number(data.cash_discount) > 0 && <TotalRow k={`Cash discount (${data.cash_discount}%)`} v={`-${fmt(Number(data.subtotal) * Number(data.cash_discount) / 100)}`} />}
-          {Number(data.cheque_discount) > 0 && <TotalRow k={`Cheque discount (${data.cheque_discount}%)`} v={`-${fmt(Number(data.subtotal) * Number(data.cheque_discount) / 100)}`} />}
+          {Number(data.cash_discount) > 0 && <TotalRow k="Cash discount" v={`-${fmt(Number(data.subtotal) * Number(data.cash_discount) / 100)}`} />}
+          {Number(data.cheque_discount) > 0 && <TotalRow k="Cheque discount" v={`-${fmt(Number(data.subtotal) * Number(data.cheque_discount) / 100)}`} />}
           {Number(data.tax_rate) > 0 && <TotalRow k={`Tax (${data.tax_rate}%)`} v={fmt(data.tax_amount as number)} />}
           <div className="h-px my-2" style={{ background: 'var(--border)' }} />
           <TotalRow k="Total" v={fmt(data.total as number)} big />
