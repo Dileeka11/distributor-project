@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeftRight, ArrowDownToLine, ArrowUpFromLine, Printer, FolderOpen } from 'lucide-react';
 import { http } from '@/lib/http';
 import { fmt0, prettyDate } from '@/lib/format';
@@ -6,7 +6,7 @@ import { useSettings } from '@/store/settings';
 import { PageHead } from '@/components/PageHead';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
-import { Empty, Stat } from '@/components/ui/Common';
+import { Empty, Stat, Pagination } from '@/components/ui/Common';
 import { Select, Input } from '@/components/ui/Field';
 import { SearchSelect } from '@/components/ui/SearchSelect';
 import { ItemPickerModal } from '@/components/ItemPickerModal';
@@ -29,6 +29,8 @@ export default function StockTransactionsPage() {
   const [res, setRes] = useState<TxnResp>({ data: [], totals: { in: 0, out: 0, net: 0 } });
   const [loaded, setLoaded] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(25);
 
   useEffect(() => { void http.get('/api/categories').then((r) => setCats(r.data.data)); }, []);
   useEffect(() => {
@@ -44,6 +46,12 @@ export default function StockTransactionsPage() {
   useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [itemId, from, to]);
 
   const rows = res.data;
+  const paginated = useMemo(() => {
+    return rows.slice((page - 1) * perPage, page * perPage);
+  }, [rows, page, perPage]);
+
+  useEffect(() => { setPage(1); }, [catFilter, itemId, from, to, rows.length]);
+
   const itemName = itemId === '' ? 'All items' : (items.find((i) => Number(i.id) === itemId)?.name ?? '');
 
   const printReport = () => {
@@ -105,7 +113,7 @@ export default function StockTransactionsPage() {
           <table className="tbl">
             <thead><tr><th>Date</th><th>Item</th><th>Source</th><th className="num">In</th><th className="num">Out</th><th>Remark</th></tr></thead>
             <tbody>
-              {rows.map((r, i) => (
+              {paginated.map((r, i) => (
                 <tr key={i}>
                   <td className="text-[12.5px] whitespace-nowrap" style={{ color: 'var(--text-muted)' }}>{r.date ? prettyDate(r.date) : '—'}</td>
                   <td><div className="mono font-semibold text-[12.5px]">{r.item_code}</div><div className="text-[12px]" style={{ color: 'var(--text-muted)' }}>{r.item_name}</div></td>
@@ -119,6 +127,15 @@ export default function StockTransactionsPage() {
           </table>
         </div>
         {loaded && rows.length === 0 && <Empty icon={<ArrowLeftRight size={40} />} title="No stock transactions" sub="Try a different item or date range." />}
+        {rows.length > 0 && (
+          <Pagination
+            totalItems={rows.length}
+            currentPage={page}
+            itemsPerPage={perPage}
+            onPageChange={setPage}
+            onItemsPerPageChange={setPerPage}
+          />
+        )}
       </div>
 
       <ItemPickerModal

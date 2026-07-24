@@ -6,7 +6,7 @@ import { toast, confirmDelete } from '@/lib/toast';
 import { PageHead } from '@/components/PageHead';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
-import { Empty, Avatar } from '@/components/ui/Common';
+import { Empty, Avatar, Pagination } from '@/components/ui/Common';
 import { SearchSelect } from '@/components/ui/SearchSelect';
 import { Modal } from '@/components/ui/Modal';
 import { Field, Input, Select, Textarea, MoneyInput } from '@/components/ui/Field';
@@ -30,14 +30,20 @@ export default function CustomersPage() {
   const [customerId, setCustomerId] = useState<number | ''>('');
   const [typeFilter, setTypeFilter] = useState<string>('All');
   const [editing, setEditing] = useState<Customer | 'new' | null>(null);
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(25);
 
   const load = () => http.get('/api/customers', { params: { type: typeFilter === 'All' ? undefined : typeFilter } }).then((r) => setRows(r.data.data));
   const loadTypes = () => http.get('/api/customer-types').then((r) => setTypes(r.data.data));
 
   useEffect(() => { void loadTypes(); }, []);
   useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [typeFilter]);
+  useEffect(() => { setPage(1); }, [typeFilter, customerId]);
 
   const filtered = customerId === '' ? rows : rows.filter((c) => Number(c.id) === customerId);
+  const paginated = useMemo(() => {
+    return filtered.slice((page - 1) * perPage, page * perPage);
+  }, [filtered, page, perPage]);
   const totalOutstanding = rows.reduce((s, c) => s + Number(c.credit_limit) + Number(c.balance), 0);
 
   return (
@@ -59,7 +65,7 @@ export default function CustomersPage() {
         <table className="tbl">
           <thead><tr><th>Code</th><th>Customer</th><th>Contact</th><th>City</th><th>Type</th><th>Paid / Outstanding</th><th className="num">Outstanding</th><th></th></tr></thead>
           <tbody>
-            {filtered.map((c) => {
+            {paginated.map((c) => {
               const bal = Number(c.balance), lim = Number(c.credit_limit);
               const paid = Number(c.paid_total ?? 0);
               const outstanding = lim + bal;
@@ -110,6 +116,15 @@ export default function CustomersPage() {
           </tbody>
         </table>
         {filtered.length === 0 && <Empty icon={<Users size={40} />} title="No customers found" />}
+        {filtered.length > 0 && (
+          <Pagination
+            totalItems={filtered.length}
+            currentPage={page}
+            itemsPerPage={perPage}
+            onPageChange={setPage}
+            onItemsPerPageChange={setPerPage}
+          />
+        )}
       </div>
 
       {editing && (

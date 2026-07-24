@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Search } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { initials } from '@/lib/format';
 
 export function SearchBar({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
@@ -104,6 +104,84 @@ export function Empty({ icon, title, sub }: { icon: ReactNode; title: string; su
       <div className="mx-auto mb-3 opacity-50">{icon}</div>
       <div className="text-[15px] font-semibold mb-1">{title}</div>
       {sub && <div className="text-[13px]">{sub}</div>}
+    </div>
+  );
+}
+
+export function Pagination({
+  totalItems,
+  currentPage,
+  itemsPerPage,
+  onPageChange,
+  onItemsPerPageChange,
+}: {
+  totalItems: number;
+  currentPage: number;
+  itemsPerPage: number;
+  onPageChange: (page: number) => void;
+  onItemsPerPageChange: (itemsPerPage: number) => void;
+}) {
+  const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
+  const start = (currentPage - 1) * itemsPerPage + 1;
+  const end = Math.min(currentPage * itemsPerPage, totalItems);
+
+  return (
+    <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-surface select-none flex-wrap gap-3">
+      <div className="text-[13px]" style={{ color: 'var(--text-muted)' }}>
+        Showing <span className="font-semibold">{totalItems === 0 ? 0 : start}</span> to{' '}
+        <span className="font-semibold">{end}</span> of{' '}
+        <span className="font-semibold">{totalItems}</span> items
+      </div>
+      
+      <div className="flex items-center gap-4.5 flex-wrap">
+        {/* Rows per page selector */}
+        <div className="flex items-center gap-2 text-[13px]" style={{ color: 'var(--text-muted)' }}>
+          <span>Rows per page:</span>
+          <select
+            className="input py-1 px-2"
+            style={{ width: 75, height: 32, padding: '0 8px' }}
+            value={itemsPerPage}
+            onChange={(e) => {
+              onItemsPerPageChange(Number(e.target.value));
+              onPageChange(1); // reset to page 1
+            }}
+          >
+            {[10, 25, 50, 100].map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Page controls */}
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            className="btn btn-sm btn-subtle p-1"
+            disabled={currentPage <= 1}
+            onClick={() => onPageChange(currentPage - 1)}
+          >
+            <ChevronLeft size={16} />
+          </button>
+          
+          <div className="flex items-center gap-1">
+            <span className="text-[13px] px-2" style={{ color: 'var(--text-muted)' }}>
+              Page <span className="font-semibold">{currentPage}</span> of{' '}
+              <span className="font-semibold">{totalPages}</span>
+            </span>
+          </div>
+
+          <button
+            type="button"
+            className="btn btn-sm btn-subtle p-1"
+            disabled={currentPage >= totalPages}
+            onClick={() => onPageChange(currentPage + 1)}
+          >
+            <ChevronRight size={16} />
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

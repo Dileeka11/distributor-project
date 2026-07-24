@@ -8,7 +8,7 @@ import { useSettings } from '@/store/settings';
 import { PageHead } from '@/components/PageHead';
 import { Button } from '@/components/ui/Button';
 import { Badge, statusBadge } from '@/components/ui/Badge';
-import { SearchBar, Empty, Segmented, Stat } from '@/components/ui/Common';
+import { SearchBar, Empty, Segmented, Stat, Pagination } from '@/components/ui/Common';
 import { Modal } from '@/components/ui/Modal';
 import { Field, Select, MoneyInput, Input } from '@/components/ui/Field';
 import { SearchSelect } from '@/components/ui/SearchSelect';
@@ -32,10 +32,17 @@ export default function InvoicesPage() {
   const [create, setCreate] = useState(params.has('create'));
   const [editInv, setEditInv] = useState<Invoice | null>(null);
   const [view, setView] = useState<Invoice | null>(null);
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(25);
 
   const load = () => http.get('/api/invoices', { params: { q, type: tab === 'all' ? undefined : tab } }).then((r) => setRows(r.data.data));
 
   useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [q, tab]);
+  useEffect(() => { setPage(1); }, [q, tab, rows.length]);
+
+  const paginated = useMemo(() => {
+    return rows.slice((page - 1) * perPage, page * perPage);
+  }, [rows, page, perPage]);
   useEffect(() => {
     if (params.has('create')) { setCreate(true); params.delete('create'); setParams(params, { replace: true }); }
   }, [params, setParams]);
@@ -69,7 +76,7 @@ export default function InvoicesPage() {
         <table className="tbl">
           <thead><tr><th>Invoice</th><th>Date</th><th>Customer</th><th>Type</th><th className="num">Total</th><th className="num">Balance</th><th>Status</th><th></th></tr></thead>
           <tbody>
-            {rows.map((inv) => {
+            {paginated.map((inv) => {
               const st = statusBadge(inv.status);
               const cancelled = !!inv.cancelled_at;
               const bal = Number(inv.total) - Number(inv.paid);
@@ -100,6 +107,15 @@ export default function InvoicesPage() {
           </tbody>
         </table>
         {rows.length === 0 && <Empty icon={<ReceiptText size={40} />} title="No invoices yet" sub="Create your first invoice to get started." />}
+        {rows.length > 0 && (
+          <Pagination
+            totalItems={rows.length}
+            currentPage={page}
+            itemsPerPage={perPage}
+            onPageChange={setPage}
+            onItemsPerPageChange={setPerPage}
+          />
+        )}
       </div>
 
       {(create || editInv) && (

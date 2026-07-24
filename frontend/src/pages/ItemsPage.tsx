@@ -6,10 +6,9 @@ import { toast, confirmDelete } from '@/lib/toast';
 import { PageHead } from '@/components/PageHead';
 import { Button } from '@/components/ui/Button';
 import { Badge, stockBadge } from '@/components/ui/Badge';
-import { Empty } from '@/components/ui/Common';
+import { Empty, SearchBar, Pagination } from '@/components/ui/Common';
 import { Modal } from '@/components/ui/Modal';
 import { Field, Input, Select, MoneyInput } from '@/components/ui/Field';
-import { SearchBar } from '@/components/ui/Common';
 import type { Category, Item } from '@/types';
 
 // One row of the per-lot stock ledger (item + GRN).
@@ -33,15 +32,21 @@ export default function ItemsPage() {
   const [itemId, setItemId] = useState<number | ''>('');
   const [editing, setEditing] = useState<Item | 'new' | null>(null);
   const [ledger, setLedger] = useState(false);
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(25);
 
   const load = () => http.get('/api/items', { params: { category_id: catFilter === 'All' ? undefined : catFilter } }).then((r) => setItems(r.data.data));
   const loadCats = () => http.get('/api/categories').then((r) => setCats(r.data.data));
 
   useEffect(() => { void loadCats(); }, []);
   useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [catFilter]);
+  useEffect(() => { setPage(1); }, [catFilter, itemId]);
 
   // Category dropdown narrows the list; the product dropdown then picks one.
   const filtered = itemId === '' ? items : items.filter((i) => Number(i.id) === itemId);
+  const paginated = useMemo(() => {
+    return filtered.slice((page - 1) * perPage, page * perPage);
+  }, [filtered, page, perPage]);
   const total = items.length;
 
   return (
@@ -76,7 +81,7 @@ export default function ItemsPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((it) => {
+            {paginated.map((it) => {
               const sb = stockBadge(it.stock);
               return (
                 <tr key={it.id}>
@@ -101,6 +106,15 @@ export default function ItemsPage() {
           </tbody>
         </table>
         {filtered.length === 0 && <Empty icon={<Box size={40} />} title="No items found" sub="Try a different search or add a new item." />}
+        {filtered.length > 0 && (
+          <Pagination
+            totalItems={filtered.length}
+            currentPage={page}
+            itemsPerPage={perPage}
+            onPageChange={setPage}
+            onItemsPerPageChange={setPerPage}
+          />
+        )}
       </div>
 
       {editing && (
