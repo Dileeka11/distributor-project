@@ -133,6 +133,10 @@ function ProductBuilder({ onClose, onSaved }: { onClose: () => void; onSaved: ()
   const batchFor = (l: DraftLine) => batchesFor(l).find((b) => Number(b.id) === l.batch_id);
 
   const itemFor = (l: DraftLine) => items.find((x) => Number(x.id) === l.item_id);
+  const looseFor = (it: Item) =>
+    Number(it.stock) - (batchesByItem[Number(it.id)] ?? []).reduce((s, b) => s + Number(b.qty_remaining), 0);
+  const oldStockPrice = (it: Item) =>
+    Number(it.wholesale_price) * (1 - (Number(it.opening_discount ?? 0) || 0) / 100);
   const setLine = (i: number, patch: Partial<DraftLine>) =>
     setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
   const pickItem = (i: number, id: number | '') => {
@@ -226,7 +230,11 @@ function ProductBuilder({ onClose, onSaved }: { onClose: () => void; onSaved: ()
               const used = lines.filter((_, idx) => idx !== i).map((x) => x.item_id);
               const need = (Number(l.qty) || 0) * unitsN;
               const batch = batchFor(l);
-              const have = batch ? Number(batch.qty_remaining) : Number(it?.stock ?? 0);
+              const have = l.batch_id === 0
+                ? (it ? looseFor(it) : 0)
+                : batch
+                  ? Number(batch.qty_remaining)
+                  : Number(it?.stock ?? 0);
               const short = it ? need > have : false;
               return (
                 <tr key={i} className="border-t border-border">
@@ -240,15 +248,25 @@ function ProductBuilder({ onClose, onSaved }: { onClose: () => void; onSaved: ()
                       ))}
                     </Select>
                     {batchesFor(l).length > 0 && (
-                      <Select value={l.batch_id === '' ? '' : String(l.batch_id)} onChange={(e) => setLine(i, { batch_id: e.target.value ? Number(e.target.value) : '' })} style={{ height: 32, fontSize: 12, marginTop: 6 }}>
+                      <Select
+                        value={l.batch_id === '' ? '' : String(l.batch_id)}
+                        onChange={(e) => {
+                          const v = e.target.value === '' ? '' : Number(e.target.value);
+                          setLine(i, { batch_id: v });
+                        }}
+                        style={{ height: 32, fontSize: 12, marginTop: 6 }}
+                      >
                         <option value="">Select cost-batch…</option>
+                        {it && looseFor(it) > 0 && (
+                          <option value="0">old stock · Rs {fmt(oldStockPrice(it))} · {looseFor(it)} left</option>
+                        )}
                         {batchesFor(l).map((b) => <option key={b.id} value={String(Number(b.id))}>GRN cost Rs {fmt(Number(b.unit_cost))} · {b.qty_remaining} left</option>)}
                       </Select>
                     )}
                     {it && (
                       <div className="text-[12px] mt-1" style={{ color: short ? 'var(--red)' : 'var(--text-muted)' }}>
                         Stock: {fmt0(Number(it.stock))} · RP Rs {fmt(Number(it.retail_price))}
-                        {batch ? ` · batch ${fmt0(Number(batch.qty_remaining))} left` : ''}
+                        {l.batch_id === 0 ? ` · old stock ${fmt0(looseFor(it))} left` : batch ? ` · batch ${fmt0(Number(batch.qty_remaining))} left` : ''}
                         {short ? ` — need ${fmt0(need)} for ${fmt0(unitsN)} units` : ''}
                       </div>
                     )}
@@ -300,10 +318,17 @@ function AssembleModal({ product, onClose, onSaved }: { product: Product; onClos
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const looseFor = (itemId: number) => {
+    const total = Number(comps.find((c) => Number(c.item_id) === itemId)?.item?.stock ?? 0);
+    const inBatches = (batchesByItem[itemId] ?? []).reduce((s, b) => s + Number(b.qty_remaining), 0);
+    return total - inBatches;
+  };
   const batchesOf = (c: ProductComponent) => batchesByItem[Number(c.item_id)] ?? [];
   const chosenBatch = (c: ProductComponent) =>
     batchesOf(c).find((b) => Number(b.id) === batchChoice[Number(c.item_id)]);
   const haveFor = (c: ProductComponent) => {
+    const choice = batchChoice[Number(c.item_id)];
+    if (choice === 0) return looseFor(Number(c.item_id));
     const b = chosenBatch(c);
     return b ? Number(b.qty_remaining) : Number(c.item?.stock ?? 0);
   };
@@ -313,7 +338,7 @@ function AssembleModal({ product, onClose, onSaved }: { product: Product; onClos
   const maxUnits = comps.length
     ? Math.min(...comps.map((c) => Math.floor(haveFor(c) / Math.max(1, Number(c.qty)))))
     : 0;
-  const batchesPicked = comps.every((c) => batchesOf(c).length === 0 || batchChoice[Number(c.item_id)]);
+  const batchesPicked = comps.every((c) => batchesOf(c).length === 0 || (batchChoice[Number(c.item_id)] !== undefined && batchChoice[Number(c.item_id)] !== ''));
   const canSave = unitsN >= 1 && unitsN <= maxUnits && batchesPicked && !busy;
 
   const save = async () => {
@@ -349,11 +374,17 @@ function AssembleModal({ product, onClose, onSaved }: { product: Product; onClos
                     <div className="font-semibold">{c.name}</div>
                     {batchesOf(c).length > 0 && (
                       <Select
-                        value={batchChoice[Number(c.item_id)] ? String(batchChoice[Number(c.item_id)]) : ''}
-                        onChange={(e) => setBatchChoice((m) => ({ ...m, [Number(c.item_id)]: e.target.value ? Number(e.target.value) : '' }))}
+                        value={batchChoice[Number(c.item_id)] !== undefined && batchChoice[Number(c.item_id)] !== '' ? String(batchChoice[Number(c.item_id)]) : ''}
+                        onChange={(e) => {
+                          const v = e.target.value === '' ? '' : Number(e.target.value);
+                          setBatchChoice((m) => ({ ...m, [Number(c.item_id)]: v }));
+                        }}
                         style={{ height: 32, fontSize: 12, marginTop: 6, maxWidth: 260 }}
                       >
                         <option value="">Select cost-batch…</option>
+                        {looseFor(Number(c.item_id)) > 0 && (
+                          <option value="0">old stock · {looseFor(Number(c.item_id))} left</option>
+                        )}
                         {batchesOf(c).map((b) => <option key={b.id} value={String(Number(b.id))}>GRN cost Rs {fmt(Number(b.unit_cost))} · {b.qty_remaining} left</option>)}
                       </Select>
                     )}
