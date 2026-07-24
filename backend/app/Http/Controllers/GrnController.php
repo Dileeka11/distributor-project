@@ -247,18 +247,33 @@ class GrnController extends Controller
 
         $batches = ItemBatch::query()->where('grn_id', $grn->id)->lockForUpdate()->get();
         foreach ($batches as $batch) {
-            abort_if(
-                (int) $batch->qty_remaining < (int) $batch->qty_in,
-                422,
-                'Cannot modify this GRN — some received stock has already been sold. Reverse those invoices first.'
-            );
+            $missing = (int) $batch->qty_in - (int) $batch->qty_remaining;
+            if ($missing > 0) {
+                // Calculate current loose/opening stock for this item
+                $item = Item::query()->whereKey($batch->item_id)->lockForUpdate()->first();
+                if ($item) {
+                    $held = (int) ItemBatch::query()->where('item_id', $item->id)->sum('qty_remaining');
+                    $loose = (int) $item->stock - $held;
+
+                    if ($loose >= $missing) {
+                        // Restore the missing quantity to this batch from loose/opening stock
+                        $batch->qty_remaining = $batch->qty_in;
+                        $batch->save();
+                    } else {
+                        abort(
+                            422,
+                            "Cannot modify this GRN — some received stock of '{$item->name}' has already been sold, and there is not enough opening stock to cover the difference."
+                        );
+                    }
+                }
+            }
         }
 
         foreach ($grn->lines as $line) {
             Item::query()->whereKey($line->item_id)->decrement('stock', (int) $line->qty);
         }
 
-        // Drop the cost-batches this GRN created (none have been sold from).
+        // Drop the cost-batches this GRN created (none have been sold from / all covered).
         ItemBatch::query()->where('grn_id', $grn->id)->delete();
 
         if ($grn->type === 'credit') {
