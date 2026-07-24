@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, X, Check, Wallet, Receipt, Clock, ReceiptText, Download, Edit2, Ban } from 'lucide-react';
+import { Plus, X, Check, Wallet, Receipt, Clock, ReceiptText, Download, Edit2, Ban, Trash2 } from 'lucide-react';
 import { http, apiErrorMessage } from '@/lib/http';
 import { fmt, fmt0, compact, prettyDate } from '@/lib/format';
 import { toast, confirmDelete } from '@/lib/toast';
@@ -17,7 +17,7 @@ import { useAuth } from '@/store/auth';
 import { canUse } from '@/lib/pages';
 import type { Customer, Invoice, Item, ItemBatch } from '@/types';
 
-type Tab = 'all' | 'cash' | 'credit';
+type Tab = 'all' | 'cash' | 'credit' | 'cancelled';
 
 interface DraftLine { item_id: number | ''; batch_id: number | ''; qty: string; price: string; }
 const blankLine = (): DraftLine => ({ item_id: '', batch_id: '', qty: '0', price: '0' });
@@ -35,14 +35,34 @@ export default function InvoicesPage() {
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(25);
 
-  const load = () => http.get('/api/invoices', { params: { q, type: tab === 'all' ? undefined : tab } }).then((r) => setRows(r.data.data));
+  const load = () => http.get('/api/invoices', { params: { q, type: tab === 'all' || tab === 'cancelled' ? undefined : tab } }).then((r) => setRows(r.data.data));
 
   useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [q, tab]);
   useEffect(() => { setPage(1); }, [q, tab, rows.length]);
 
+  const deleteInvoice = async (inv: Invoice) => {
+    if (!(await confirmDelete({
+      title: 'Delete Invoice permanently?',
+      confirmText: 'Yes, delete it',
+      html: `Are you sure you want to permanently delete cancelled invoice <b>${inv.no}</b>? This action cannot be undone.`
+    }))) return;
+    try {
+      await http.delete(`/api/invoices/${inv.id}`);
+      toast('Invoice deleted');
+      void load();
+    } catch (e) { toast(apiErrorMessage(e), 'err'); }
+  };
+
+  const displayedRows = useMemo(() => {
+    if (tab === 'cancelled') {
+      return rows.filter((i) => !!i.cancelled_at);
+    }
+    return rows;
+  }, [rows, tab]);
+
   const paginated = useMemo(() => {
-    return rows.slice((page - 1) * perPage, page * perPage);
-  }, [rows, page, perPage]);
+    return displayedRows.slice((page - 1) * perPage, page * perPage);
+  }, [displayedRows, page, perPage]);
   useEffect(() => {
     if (params.has('create')) { setCreate(true); params.delete('create'); setParams(params, { replace: true }); }
   }, [params, setParams]);
@@ -68,7 +88,7 @@ export default function InvoicesPage() {
       </div>
 
       <div className="flex gap-2.5 mb-4 flex-wrap">
-        <Segmented value={tab} onChange={setTab} options={[{ value: 'all', label: 'All' }, { value: 'cash', label: 'Cash' }, { value: 'credit', label: 'Credit' }]} />
+        <Segmented value={tab} onChange={setTab} options={[{ value: 'all', label: 'All' }, { value: 'cash', label: 'Cash' }, { value: 'credit', label: 'Credit' }, { value: 'cancelled', label: 'Cancelled' }]} />
         <SearchBar value={q} onChange={setQ} placeholder="Search invoice no. or customer…" />
       </div>
 
@@ -99,6 +119,9 @@ export default function InvoicesPage() {
                           catch (e) { toast(apiErrorMessage(e), 'err'); }
                         }} />
                       )}
+                      {cancelled && tab === 'cancelled' && (
+                        <Button variant="subtle" size="sm" icon={<Trash2 size={14} />} title="Delete invoice permanently" onClick={() => void deleteInvoice(inv)} style={{ color: 'var(--red)' }} />
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -106,10 +129,16 @@ export default function InvoicesPage() {
             })}
           </tbody>
         </table>
-        {rows.length === 0 && <Empty icon={<ReceiptText size={40} />} title="No invoices yet" sub="Create your first invoice to get started." />}
-        {rows.length > 0 && (
+        {displayedRows.length === 0 && (
+          <Empty 
+            icon={<ReceiptText size={40} />} 
+            title={tab === 'cancelled' ? "No cancelled invoices" : "No invoices yet"} 
+            sub={tab === 'cancelled' ? "Cancelled invoices will show up here." : "Create your first invoice to get started."} 
+          />
+        )}
+        {displayedRows.length > 0 && (
           <Pagination
-            totalItems={rows.length}
+            totalItems={displayedRows.length}
             currentPage={page}
             itemsPerPage={perPage}
             onPageChange={setPage}

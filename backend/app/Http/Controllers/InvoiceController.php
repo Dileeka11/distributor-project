@@ -263,4 +263,18 @@ class InvoiceController extends Controller
             }
         }
     }
+
+    /**
+     * Delete a cancelled invoice from the database entirely.
+     */
+    public function destroy(Invoice $invoice): JsonResponse
+    {
+        abort_unless((bool) $invoice->cancelled_at, 422, 'Only cancelled invoices can be deleted.');
+
+        DB::transaction(function () use ($invoice) {
+            $invoice->delete();
+        });
+
+        return response()->json(['message' => 'Invoice deleted successfully']);
+    }
 }

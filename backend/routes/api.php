@@ -70,6 +70,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/invoices/{invoice}', [InvoiceController::class, 'show']);
     Route::put('/invoices/{invoice}', [InvoiceController::class, 'update']);
     Route::post('/invoices/{invoice}/cancel', [InvoiceController::class, 'cancel']);
+    Route::delete('/invoices/{invoice}', [InvoiceController::class, 'destroy']);
 
     Route::get('/grns', [GrnController::class, 'index']);
     Route::post('/grns', [GrnController::class, 'store']);
