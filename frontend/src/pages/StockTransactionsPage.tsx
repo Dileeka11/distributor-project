@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeftRight, ArrowDownToLine, ArrowUpFromLine, Printer } from 'lucide-react';
+import { ArrowLeftRight, ArrowDownToLine, ArrowUpFromLine, Printer, FolderOpen } from 'lucide-react';
 import { http } from '@/lib/http';
 import { fmt0, prettyDate } from '@/lib/format';
 import { useSettings } from '@/store/settings';
@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Empty, Stat } from '@/components/ui/Common';
 import { Select, Input } from '@/components/ui/Field';
 import { SearchSelect } from '@/components/ui/SearchSelect';
+import { ItemPickerModal } from '@/components/ItemPickerModal';
 import type { Category, Item } from '@/types';
 
 interface TxnRow {
@@ -27,6 +28,7 @@ export default function StockTransactionsPage() {
   const [to, setTo] = useState('');
   const [res, setRes] = useState<TxnResp>({ data: [], totals: { in: 0, out: 0, net: 0 } });
   const [loaded, setLoaded] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   useEffect(() => { void http.get('/api/categories').then((r) => setCats(r.data.data)); }, []);
   useEffect(() => {
@@ -88,6 +90,7 @@ export default function StockTransactionsPage() {
           {cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </Select>
         <SearchSelect items={items} value={itemId} onChange={setItemId} allLabel="All items" placeholder="Search item name or code…" width={260} subtitle={(x) => `${x.code} · stock ${fmt0(Number(x.stock))}`} />
+        <Button variant="subtle" icon={<FolderOpen size={15} />} onClick={() => setPickerOpen(true)} style={{ height: 40 }}>Browse Items</Button>
         <div className="flex items-center gap-2">
           <span className="text-[12.5px]" style={{ color: 'var(--text-muted)' }}>From</span>
           <Input type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} style={{ height: 40, width: 160 }} />
@@ -117,6 +120,12 @@ export default function StockTransactionsPage() {
         </div>
         {loaded && rows.length === 0 && <Empty icon={<ArrowLeftRight size={40} />} title="No stock transactions" sub="Try a different item or date range." />}
       </div>
+
+      <ItemPickerModal
+        isOpen={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onSelect={setItemId}
+      />
     </div>
   );
 }
