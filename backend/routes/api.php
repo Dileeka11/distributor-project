@@ -76,6 +76,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/grns/{grn}', [GrnController::class, 'show']);
     Route::put('/grns/{grn}', [GrnController::class, 'update']);
     Route::post('/grns/{grn}/cancel', [GrnController::class, 'cancel']);
+    Route::delete('/grns/{grn}', [GrnController::class, 'destroy']);
 
     Route::get('/cheques', [ChequeController::class, 'index']);
     Route::post('/cheques/{cheque}/toggle', [ChequeController::class, 'toggle']);

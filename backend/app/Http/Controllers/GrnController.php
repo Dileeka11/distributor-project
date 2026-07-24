@@ -124,6 +124,20 @@ class GrnController extends Controller
     }
 
     /**
+     * Delete a cancelled GRN from the database entirely.
+     */
+    public function destroy(Grn $grn): JsonResponse
+    {
+        abort_unless((bool) $grn->cancelled_at, 422, 'Only cancelled GRNs can be deleted.');
+
+        DB::transaction(function () use ($grn) {
+            $grn->delete();
+        });
+
+        return response()->json(['message' => 'GRN deleted successfully']);
+    }
+
+    /**
      * Tax may only be charged by a user granted the "tax_control" capability
      * (admins always). Everyone else bills at 0% whatever the client sends.
      */

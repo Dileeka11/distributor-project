@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, X, Check, Truck, Wallet, PackageOpen, Clock, Box, Edit2, Ban, Eye, Printer } from 'lucide-react';
+import { Plus, X, Check, Truck, Wallet, PackageOpen, Clock, Box, Edit2, Ban, Eye, Printer, Trash2 } from 'lucide-react';
 import { http, apiErrorMessage } from '@/lib/http';
 import { fmt, fmt0, compact, prettyDate } from '@/lib/format';
 import { toast, confirmDelete } from '@/lib/toast';
@@ -148,7 +148,7 @@ function printGrnDoc(d: Grn, settings: AppSettings): void {
   w.print();
 }
 
-type Tab = 'all' | 'cash' | 'credit';
+type Tab = 'all' | 'cash' | 'credit' | 'cancelled';
 
 interface DraftLine { item_id: number | ''; qty: string; unit_price: string; discount: string; }
 const blankLine = (): DraftLine => ({ item_id: '', qty: '1', unit_price: '0', discount: '0' });
@@ -165,7 +165,7 @@ export default function GrnsPage() {
   const [editGrn, setEditGrn] = useState<Grn | null>(null);
   const [view, setView] = useState<Grn | null>(null);
 
-  const load = () => http.get('/api/grns', { params: { q, type: tab === 'all' ? undefined : tab } }).then((r) => setRows(r.data.data));
+  const load = () => http.get('/api/grns', { params: { q, type: tab === 'all' || tab === 'cancelled' ? undefined : tab } }).then((r) => setRows(r.data.data));
   useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [q, tab]);
 
   // Fetch the full GRN (supplier + lines + cheques) and open the print document.
@@ -175,6 +175,27 @@ export default function GrnsPage() {
       printGrnDoc(data.data as Grn, settings);
     } catch (e) { toast(apiErrorMessage(e), 'err'); }
   };
+
+  // Delete cancelled GRN permanently.
+  const deleteGrn = async (g: Grn) => {
+    if (!(await confirmDelete({
+      title: 'Delete GRN permanently?',
+      confirmText: 'Yes, delete it',
+      html: `Are you sure you want to permanently delete cancelled GRN <b>${g.no}</b>? This action cannot be undone.`
+    }))) return;
+    try {
+      await http.delete(`/api/grns/${g.id}`);
+      toast('GRN deleted');
+      void load();
+    } catch (e) { toast(apiErrorMessage(e), 'err'); }
+  };
+
+  const displayedRows = useMemo(() => {
+    if (tab === 'cancelled') {
+      return rows.filter((g) => !!g.cancelled_at);
+    }
+    return rows;
+  }, [rows, tab]);
 
   // Cancelled GRNs are void — never counted in any total.
   const live = rows.filter((g) => !g.cancelled_at);
@@ -197,7 +218,7 @@ export default function GrnsPage() {
       </div>
 
       <div className="flex gap-2.5 mb-4 flex-wrap">
-        <Segmented value={tab} onChange={setTab} options={[{ value: 'all', label: 'All' }, { value: 'cash', label: 'Cash' }, { value: 'credit', label: 'Credit' }]} />
+        <Segmented value={tab} onChange={setTab} options={[{ value: 'all', label: 'All' }, { value: 'cash', label: 'Cash' }, { value: 'credit', label: 'Credit' }, { value: 'cancelled', label: 'Cancelled' }]} />
         <SearchBar value={q} onChange={setQ} placeholder="Search GRN no. or supplier…" />
       </div>
 
@@ -205,7 +226,7 @@ export default function GrnsPage() {
         <table className="tbl">
           <thead><tr><th>GRN</th><th>Date</th><th>Supplier</th><th>Type</th><th className="num">Total</th><th className="num">Balance</th><th>Status</th><th></th></tr></thead>
           <tbody>
-            {rows.map((g) => {
+            {displayedRows.map((g) => {
               const st = statusBadge(g.status);
               const cancelled = !!g.cancelled_at;
               const bal = Number(g.total) - Number(g.paid);
@@ -235,6 +256,9 @@ export default function GrnsPage() {
                           catch (e) { toast(apiErrorMessage(e), 'err'); }
                         }} />
                       )}
+                      {cancelled && tab === 'cancelled' && (
+                        <Button variant="subtle" size="sm" icon={<Trash2 size={14} />} title="Delete GRN permanently" onClick={() => void deleteGrn(g)} style={{ color: 'var(--red)' }} />
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -242,7 +266,13 @@ export default function GrnsPage() {
             })}
           </tbody>
         </table>
-        {rows.length === 0 && <Empty icon={<PackageOpen size={40} />} title="No GRNs yet" sub="Record a goods-received note to add stock." />}
+        {displayedRows.length === 0 && (
+          <Empty 
+            icon={<PackageOpen size={40} />} 
+            title={tab === 'cancelled' ? "No cancelled GRNs" : "No GRNs yet"} 
+            sub={tab === 'cancelled' ? "Cancelled GRNs will show up here." : "Record a goods-received note to add stock."} 
+          />
+        )}
       </div>
 
       {(create || editGrn) && (
