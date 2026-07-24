@@ -19,22 +19,24 @@ class StockController extends Controller
         $rows = DB::table('stocks')
             ->join('items', 'items.id', '=', 'stocks.item_id')
             ->leftJoin('grns', 'grns.id', '=', 'stocks.grn_id')
+            ->leftJoin('item_batches', 'item_batches.id', '=', 'stocks.batch_id')
             ->when($q !== '', fn ($qb) => $qb->where(function ($w) use ($q) {
                 $w->where('items.name', 'like', "%{$q}%")->orWhere('items.code', 'like', "%{$q}%");
             }))
             ->orderBy('items.name')
-            ->orderByRaw('stocks.grn_id = 0 desc')  // opening first
-            ->orderBy('stocks.grn_id')
+            ->orderByRaw('stocks.batch_id = 0 desc')  // opening first
+            ->orderBy('stocks.batch_id')
             ->get([
                 'stocks.item_id',
                 'items.code as item_code',
                 'items.name as item_name',
                 'items.stock as item_total',
                 'stocks.grn_id',
+                'stocks.batch_id',
                 'grns.no as grn_no',
                 'grns.date as grn_date',
                 'stocks.qty',
-                DB::raw('(SELECT ib.unit_cost FROM item_batches ib WHERE ib.item_id = stocks.item_id AND ib.grn_id = stocks.grn_id ORDER BY ib.id LIMIT 1) as unit_cost'),
+                'item_batches.unit_cost as unit_cost',
             ]);
 
         return response()->json(['data' => $rows]);

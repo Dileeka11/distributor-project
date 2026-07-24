@@ -14,7 +14,7 @@ import type { Category, Item } from '@/types';
 // One row of the per-lot stock ledger (item + GRN).
 interface StockRow {
   item_id: number; item_code: string; item_name: string; item_total: number;
-  grn_id: number; grn_no: string | null; grn_date: string | null;
+  grn_id: number; batch_id: number; grn_no: string | null; grn_date: string | null;
   qty: number; unit_cost: string | number | null;
 }
 
@@ -174,15 +174,15 @@ function StockLedgerModal({ onClose }: { onClose: () => void }) {
             <thead><tr><th>Item</th><th>Source</th><th>Date</th><th className="num">Unit cost</th><th className="num">Qty</th></tr></thead>
             <tbody>
               {groups.map((g) => g.lots.map((l, i) => (
-                <tr key={`${g.code}-${l.grn_id}`}>
+                <tr key={`${g.code}-${l.batch_id}`}>
                   <td>
                     {i === 0
                       ? <div><div className="mono font-semibold">{g.code}</div><div className="text-[12px] font-medium">{g.name}</div></div>
                       : <span style={{ color: 'var(--text-faint)' }}>↳</span>}
                   </td>
-                  <td>{l.grn_id === 0
+                  <td>{l.batch_id === 0
                     ? <Badge kind="gray">Opening</Badge>
-                    : <span className="mono font-semibold">{l.grn_no ?? `GRN #${l.grn_id}`}</span>}</td>
+                    : <span className="mono font-semibold">{l.grn_no ?? `Batch #${l.batch_id}`}</span>}</td>
                   <td className="text-[12px] whitespace-nowrap" style={{ color: 'var(--text-muted)' }}>{l.grn_date ? prettyDate(l.grn_date) : '—'}</td>
                   <td className="num money" style={{ color: 'var(--text-muted)' }}>{l.unit_cost != null ? fmt(Number(l.unit_cost)) : '—'}</td>
                   <td className="num"><Badge kind={Number(l.qty) > 0 ? 'green' : 'red'}>{fmt0(Number(l.qty))}</Badge></td>

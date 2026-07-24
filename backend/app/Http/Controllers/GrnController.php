@@ -131,7 +131,12 @@ class GrnController extends Controller
         abort_unless((bool) $grn->cancelled_at, 422, 'Only cancelled GRNs can be deleted.');
 
         DB::transaction(function () use ($grn) {
-            $grn->delete();
+            $ids = $grn->lines()->pluck('item_id')->all();
+            // Cancelling already removed them, but never leave a batch orphaned:
+            // a NULL grn_id would detach that stock from its cost lot.
+            ItemBatch::query()->where('grn_id', $grn->id)->delete();
+            $grn->delete(); // lines cascade; stock/payable already reversed at cancel
+            app(StockService::class)->projectMany($ids);
         });
 
         return response()->json(['message' => 'GRN deleted successfully']);

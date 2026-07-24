@@ -29,29 +29,32 @@ class StockService
         $batches = ItemBatch::query()
             ->where('item_id', $itemId)
             ->where('qty_remaining', '>', 0)
-            ->get(['grn_id', 'qty_remaining']);
+            ->get(['id', 'grn_id', 'qty_remaining']);
 
-        $rows = [];
+        // One lot per cost-batch (keyed by batch, so a batch whose GRN row is
+        // gone keeps its own lot instead of collapsing into opening), plus the
+        // opening remainder as batch 0.
+        $now = now();
+        $insert = [];
         $held = 0;
         foreach ($batches as $b) {
-            $rows[(int) $b->grn_id] = ($rows[(int) $b->grn_id] ?? 0) + (int) $b->qty_remaining;
-            $held += (int) $b->qty_remaining;
+            $qty = (int) $b->qty_remaining;
+            $held += $qty;
+            $insert[] = [
+                'item_id' => $itemId, 'grn_id' => (int) ($b->grn_id ?? 0), 'batch_id' => (int) $b->id,
+                'qty' => $qty, 'created_at' => $now, 'updated_at' => $now,
+            ];
         }
         $opening = (int) $item->stock - $held;
         if ($opening > 0) {
-            $rows[0] = ($rows[0] ?? 0) + $opening;
+            $insert[] = [
+                'item_id' => $itemId, 'grn_id' => 0, 'batch_id' => 0,
+                'qty' => $opening, 'created_at' => $now, 'updated_at' => $now,
+            ];
         }
 
         // Replace this item's rows with the freshly computed set.
         Stock::query()->where('item_id', $itemId)->delete();
-        $now = now();
-        $insert = [];
-        foreach ($rows as $grnId => $qty) {
-            if ($qty <= 0) {
-                continue;
-            }
-            $insert[] = ['item_id' => $itemId, 'grn_id' => $grnId, 'qty' => $qty, 'created_at' => $now, 'updated_at' => $now];
-        }
         if ($insert) {
             Stock::query()->insert($insert);
         }

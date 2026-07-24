@@ -27,21 +27,28 @@ class StockTransactionController extends Controller
         $inRange = fn (?string $d) => $d !== null && (! $from || $d >= $from) && (! $to || $d <= $to);
         $rows = [];
 
-        // a) Opening stock per item = current opening (grn 0) minus opening adjustments.
-        $openStock = Stock::query()->where('grn_id', 0)
-            ->when($itemId, fn ($q) => $q->where('item_id', $itemId))
-            ->groupBy('item_id')->selectRaw('item_id, SUM(qty) q')->pluck('q', 'item_id');
-        $openAdj = StockAdjustment::query()->where('grn_id', 0)
-            ->when($itemId, fn ($q) => $q->where('item_id', $itemId))
-            ->groupBy('item_id')->selectRaw('item_id, SUM(qty) q')->pluck('q', 'item_id');
+        // a) Opening stock = whatever of the item's current stock is NOT explained
+        // by recorded movements (all-time). Deriving it this way means the report
+        // always reconciles, even if a source GRN row was removed.
+        $sumBy = fn ($rowsQ, string $itemCol, string $qtyCol) => $rowsQ
+            ->groupBy($itemCol)->selectRaw("{$itemCol} AS item_id, SUM({$qtyCol}) AS q")->pluck('q', 'item_id');
+        $grnIn = $sumBy(DB::table('grn_lines')->join('grns', 'grns.id', '=', 'grn_lines.grn_id')
+            ->whereNull('grns.cancelled_at')->when($itemId, fn ($q) => $q->where('grn_lines.item_id', $itemId)),
+            'grn_lines.item_id', 'grn_lines.qty');
+        $invOut = $sumBy(DB::table('invoice_lines')->join('invoices', 'invoices.id', '=', 'invoice_lines.invoice_id')
+            ->whereNull('invoices.cancelled_at')->when($itemId, fn ($q) => $q->where('invoice_lines.item_id', $itemId)),
+            'invoice_lines.item_id', 'invoice_lines.qty');
+        $adjNet = $sumBy(DB::table('stock_adjustments')->when($itemId, fn ($q) => $q->where('item_id', $itemId)),
+            'stock_adjustments.item_id', 'stock_adjustments.qty');
 
         Item::query()->when($itemId, fn ($q) => $q->whereKey($itemId))
-            ->get(['id', 'code', 'name', 'created_at'])
-            ->each(function (Item $it) use (&$rows, $openStock, $openAdj, $inRange) {
-                $orig = (int) ($openStock[$it->id] ?? 0) - (int) ($openAdj[$it->id] ?? 0);
+            ->get(['id', 'code', 'name', 'stock', 'created_at'])
+            ->each(function (Item $it) use (&$rows, $grnIn, $invOut, $adjNet, $inRange) {
+                $recorded = (int) ($grnIn[$it->id] ?? 0) - (int) ($invOut[$it->id] ?? 0) + (int) ($adjNet[$it->id] ?? 0);
+                $opening = (int) $it->stock - $recorded;
                 $d = optional($it->created_at)->toDateString();
-                if ($orig > 0 && $inRange($d)) {
-                    $rows[] = $this->row($d, $it->created_at, $it, 'Opening stock', null, $orig, 0, null);
+                if ($opening > 0 && $inRange($d)) {
+                    $rows[] = $this->row($d, $it->created_at, $it, 'Opening stock', null, $opening, 0, null);
                 }
             });
 
