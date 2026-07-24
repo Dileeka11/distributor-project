@@ -78,12 +78,12 @@ class StockTransactionController extends Controller
             ->when($itemId, fn ($q) => $q->where('stock_adjustments.item_id', $itemId))
             ->when($from, fn ($q) => $q->whereDate('stock_adjustments.created_at', '>=', $from))
             ->when($to, fn ($q) => $q->whereDate('stock_adjustments.created_at', '<=', $to))
-            ->get(['stock_adjustments.created_at', 'stock_adjustments.qty', 'stock_adjustments.remark', 'stock_adjustments.grn_id', 'grns.no as grn_no', 'items.id as item_id', 'items.code', 'items.name'])
+            ->get(['stock_adjustments.id as adjustment_id', 'stock_adjustments.created_at', 'stock_adjustments.qty', 'stock_adjustments.remark', 'stock_adjustments.grn_id', 'grns.no as grn_no', 'items.id as item_id', 'items.code', 'items.name'])
             ->each(function ($a) use (&$rows) {
                 $q = (int) $a->qty;
                 $src = 'Adjustment' . ($a->grn_no ? " · {$a->grn_no}" : ($a->grn_id == 0 ? ' · Opening' : ''));
                 $d = substr((string) $a->created_at, 0, 10);
-                $rows[] = $this->row($d, $a->created_at, $a, $src, $a->grn_id ?: null, $q > 0 ? $q : 0, $q < 0 ? -$q : 0, $a->remark);
+                $rows[] = $this->row($d, $a->created_at, $a, $src, $a->grn_id ?: null, $q > 0 ? $q : 0, $q < 0 ? -$q : 0, $a->remark, null, (int) $a->adjustment_id);
             });
 
         // Oldest first, then by created_at.
@@ -98,7 +98,7 @@ class StockTransactionController extends Controller
         ]);
     }
 
-    private function row($date, $createdAt, $it, string $source, $grnId, int $in, int $out, ?string $remark): array
+    private function row($date, $createdAt, $it, string $source, $grnId, int $in, int $out, ?string $remark, ?int $batchId = null, ?int $adjustmentId = null): array
     {
         return [
             'date' => $date ? substr((string) $date, 0, 10) : null,
@@ -111,6 +111,7 @@ class StockTransactionController extends Controller
             'qty_in' => $in,
             'qty_out' => $out,
             'remark' => $remark,
+            'adjustment_id' => $adjustmentId,
         ];
     }
 }

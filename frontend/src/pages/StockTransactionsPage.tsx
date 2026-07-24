@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeftRight, ArrowDownToLine, ArrowUpFromLine, Printer, FolderOpen } from 'lucide-react';
+import { ArrowLeftRight, ArrowDownToLine, ArrowUpFromLine, Printer, FolderOpen, Trash2 } from 'lucide-react';
 import { http } from '@/lib/http';
 import { fmt0, prettyDate } from '@/lib/format';
 import { useSettings } from '@/store/settings';
@@ -10,11 +10,13 @@ import { Empty, Stat, Pagination } from '@/components/ui/Common';
 import { Select, Input } from '@/components/ui/Field';
 import { SearchSelect } from '@/components/ui/SearchSelect';
 import { ItemPickerModal } from '@/components/ItemPickerModal';
+import { toast, confirmDelete } from '@/lib/toast';
 import type { Category, Item } from '@/types';
 
 interface TxnRow {
   date: string | null; created_at: string; item_id: number; item_code: string; item_name: string;
   source: string; grn_id: number | null; qty_in: number; qty_out: number; remark: string | null;
+  adjustment_id: number | null;
 }
 interface TxnResp { data: TxnRow[]; totals: { in: number; out: number; net: number }; }
 
@@ -44,6 +46,23 @@ export default function StockTransactionsPage() {
       .then((r) => setRes(r.data)).finally(() => setLoaded(true));
   };
   useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [itemId, from, to]);
+
+  const deleteAdjustment = async (id: number) => {
+    const ok = await confirmDelete({
+      title: 'Delete adjustment?',
+      html: 'Are you sure you want to delete this manual adjustment? The stock change will be reversed.',
+      confirmText: 'Yes, delete it'
+    });
+    if (!ok) return;
+
+    try {
+      await http.delete(`/api/stock-adjustments/${id}`);
+      toast('Adjustment deleted and stock reversed successfully');
+      load();
+    } catch (e: any) {
+      toast(e.response?.data?.message || 'Failed to delete adjustment', 'err');
+    }
+  };
 
   const rows = res.data;
   const paginated = useMemo(() => {
@@ -111,7 +130,7 @@ export default function StockTransactionsPage() {
       <div className="card overflow-hidden">
         <div style={{ maxHeight: 460, overflow: 'auto' }}>
           <table className="tbl">
-            <thead><tr><th>Date</th><th>Item</th><th>Source</th><th className="num">In</th><th className="num">Out</th><th>Remark</th></tr></thead>
+            <thead><tr><th>Date</th><th>Item</th><th>Source</th><th className="num">In</th><th className="num">Out</th><th>Remark</th><th style={{ width: 60 }}></th></tr></thead>
             <tbody>
               {paginated.map((r, i) => (
                 <tr key={i}>
@@ -121,6 +140,19 @@ export default function StockTransactionsPage() {
                   <td className="num">{r.qty_in ? <Badge kind="green">+{fmt0(r.qty_in)}</Badge> : <span style={{ color: 'var(--text-faint)' }}>—</span>}</td>
                   <td className="num">{r.qty_out ? <Badge kind="red">−{fmt0(r.qty_out)}</Badge> : <span style={{ color: 'var(--text-faint)' }}>—</span>}</td>
                   <td className="text-[12.5px]" style={{ color: 'var(--text-muted)' }}>{r.remark ?? '—'}</td>
+                  <td className="text-right p-1.5">
+                    {r.adjustment_id !== null && (
+                      <button
+                        className="grid place-items-center w-7 h-7 rounded-md hover:bg-surface-2 ml-auto"
+                        onClick={() => deleteAdjustment(r.adjustment_id!)}
+                        title="Delete adjustment"
+                        type="button"
+                        style={{ color: 'var(--red)' }}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

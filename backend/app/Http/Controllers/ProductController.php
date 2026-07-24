@@ -153,12 +153,6 @@ class ProductController extends Controller
     /** Delete a product: return un-sold assembled units to component stock. */
     public function destroy(Product $product): JsonResponse
     {
-        abort_if(
-            DB::table('invoice_lines')->where('item_id', $product->item_id)->exists(),
-            422,
-            'This product is used on invoices. Delete those invoices first.'
-        );
-
         DB::transaction(function () use ($product) {
             $product->loadMissing(['item', 'components']);
             $remaining = $product->item ? (int) $product->item->stock : 0;
@@ -170,16 +164,27 @@ class ProductController extends Controller
                 }
             }
 
-            // Deleting the item cascades to the product + its components (and the
-            // product item's own stock rows).
-            if ($product->item) {
-                $product->item->delete();
-            } else {
+            // We want to delete the product and its components. If the product item is 
+            // referenced in invoice_lines (active or cancelled), deleting the item will fail 
+            // due to restrictOnDelete. In that case, we delete the product definition and set 
+            // the item's stock to 0, keeping the item row for audit reference.
+            // Otherwise, we delete the item entirely.
+            $isReferenced = DB::table('invoice_lines')->where('item_id', $product->item_id)->exists();
+            if ($isReferenced) {
                 $product->delete();
+                if ($product->item) {
+                    $product->item->update(['stock' => 0]);
+                }
+            } else {
+                if ($product->item) {
+                    $product->item->delete();
+                } else {
+                    $product->delete();
+                }
             }
 
-            // Components got stock back; re-project them.
-            app(StockService::class)->projectMany($componentIds);
+            // Components and product item got stock back / updated; re-project them.
+            app(StockService::class)->projectMany(array_merge($componentIds, [$product->item_id]));
         });
 
         return response()->json(['message' => 'Deleted']);

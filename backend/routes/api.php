@@ -55,6 +55,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/stock-adjustments', [StockAdjustmentController::class, 'index']);
     Route::get('/stock-adjustments/lots/{item}', [StockAdjustmentController::class, 'lots']);
     Route::post('/stock-adjustments', [StockAdjustmentController::class, 'store']);
+    Route::delete('/stock-adjustments/{stockAdjustment}', [StockAdjustmentController::class, 'destroy']);
     Route::get('/items/{item}/batches', [ItemController::class, 'batches']);
     Route::apiResource('items', ItemController::class)->only(['index', 'store', 'update', 'destroy']);
 

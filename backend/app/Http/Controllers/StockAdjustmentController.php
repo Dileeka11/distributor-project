@@ -123,4 +123,54 @@ class StockAdjustmentController extends Controller
 
         return response()->json(['data' => $adj], 201);
     }
+
+    /** Delete a stock adjustment, reverse its quantity from the lot, then re-project. */
+    public function destroy(StockAdjustment $stockAdjustment): JsonResponse
+    {
+        DB::transaction(function () use ($stockAdjustment) {
+            /** @var Item $item */
+            $item = Item::query()->whereKey($stockAdjustment->item_id)->lockForUpdate()->firstOrFail();
+            $qty = (int) $stockAdjustment->qty; // signed (positive for add, negative for reduce)
+
+            // Reversing: if we added, we must subtract. If we reduced, we must add back.
+            // So we subtract the signed qty.
+            if ($qty > 0) {
+                // Was an ADDITION. We must subtract this quantity to reverse it.
+                if ($stockAdjustment->batch_id) {
+                    /** @var ItemBatch $batch */
+                    $batch = ItemBatch::query()->whereKey($stockAdjustment->batch_id)->lockForUpdate()->firstOrFail();
+                    abort_if((int) $batch->qty_remaining < $qty, 422, "Cannot delete adjustment — some of the added stock has already been sold.");
+                    $batch->qty_remaining = (int) $batch->qty_remaining - $qty;
+                    $batch->save();
+                } else {
+                    // Opening lot
+                    $held = (int) ItemBatch::query()->where('item_id', $item->id)->sum('qty_remaining');
+                    $opening = (int) $item->stock - $held;
+                    abort_if($opening < $qty, 422, "Cannot delete adjustment — some of the added opening stock has already been sold.");
+                }
+                
+                // Perform the subtraction on main item stock
+                $item->stock = (int) $item->stock - $qty;
+                $item->save();
+            } else {
+                // Was a REDUCTION (negative qty). We must add this quantity back to reverse it.
+                $absQty = abs($qty);
+                if ($stockAdjustment->batch_id) {
+                    /** @var ItemBatch $batch */
+                    $batch = ItemBatch::query()->whereKey($stockAdjustment->batch_id)->lockForUpdate()->firstOrFail();
+                    $batch->qty_remaining = (int) $batch->qty_remaining + $absQty;
+                    $batch->save();
+                }
+                
+                $item->stock = (int) $item->stock + $absQty;
+                $item->save();
+            }
+
+            $stockAdjustment->delete();
+
+            app(StockService::class)->project((int) $item->id);
+        });
+
+        return response()->json(['message' => 'Adjustment deleted and stock restored successfully']);
+    }
 }
