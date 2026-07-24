@@ -71,7 +71,7 @@ export default function StockTransactionsPage() {
   return (
     <div className="fade-in">
       <PageHead
-        title="Stock Report"
+        title="Stock Transaction Report"
         sub="Every stock movement — opening, GRN receipts, invoice sales and adjustments."
         actions={<Button variant="subtle" icon={<Printer size={16} />} onClick={printReport}>Print / PDF</Button>}
       />

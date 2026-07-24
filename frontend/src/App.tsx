@@ -19,6 +19,7 @@ const InvoicesPage = lazy(() => import('@/pages/InvoicesPage'));
 const GrnsPage = lazy(() => import('@/pages/GrnsPage'));
 const OutstandingPage = lazy(() => import('@/pages/OutstandingPage'));
 const ReportsPage = lazy(() => import('@/pages/ReportsPage'));
+const LiveStockPage = lazy(() => import('@/pages/LiveStockPage'));
 const EmployeesPage = lazy(() => import('@/pages/EmployeesPage'));
 const AttendancePage = lazy(() => import('@/pages/AttendancePage'));
 const PayrollPage = lazy(() => import('@/pages/PayrollPage'));
@@ -70,6 +71,7 @@ export default function App() {
         <Route path="grns" element={<Guard perm="grns"><GrnsPage /></Guard>} />
         <Route path="outstanding" element={<Guard perm="outstanding"><OutstandingPage /></Guard>} />
         <Route path="reports" element={<Guard perm="reports"><ReportsPage /></Guard>} />
+        <Route path="live-stock" element={<Guard perm="live_stock"><LiveStockPage /></Guard>} />
         <Route path="attendance" element={<Guard perm="attendance"><AttendancePage /></Guard>} />
         <Route path="payroll" element={<Guard perm="payroll"><PayrollPage /></Guard>} />
         <Route path="users" element={<Guard perm="users"><UsersPage /></Guard>} />
