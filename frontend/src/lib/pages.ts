@@ -15,6 +15,7 @@ export const PAGES: PageDef[] = [
   { key: 'grns', label: 'Purchases (GRN)', to: '/grns', group: 'Transactions' },
   { key: 'outstanding', label: 'Outstanding', to: '/outstanding', group: 'Transactions' },
   { key: 'reports', label: 'Reports', to: '/reports', group: 'Transactions' },
+  { key: 'stock_txn', label: 'Stock Report', to: '/stock-transactions', group: 'Transactions' },
   { key: 'attendance', label: 'Attendance', to: '/attendance', group: 'HR' },
   { key: 'payroll', label: 'Payroll', to: '/payroll', group: 'HR' },
   { key: 'users', label: 'System Users', to: '/users', group: 'System' },

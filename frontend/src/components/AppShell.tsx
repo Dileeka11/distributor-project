@@ -1,5 +1,5 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
-import { LayoutDashboard, Package, Boxes, SlidersHorizontal, Truck, Users, ReceiptText, PackageOpen, Scale, FileBarChart2, UserCog, CalendarCheck, Wallet, ShieldCheck, ChevronDown, Settings as SettingsIcon, LogOut } from 'lucide-react';
+import { LayoutDashboard, Package, Boxes, SlidersHorizontal, ArrowLeftRight, Truck, Users, ReceiptText, PackageOpen, Scale, FileBarChart2, UserCog, CalendarCheck, Wallet, ShieldCheck, ChevronDown, Settings as SettingsIcon, LogOut } from 'lucide-react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '@/store/auth';
 import { useSettings } from '@/store/settings';
@@ -19,6 +19,7 @@ const NAV: NavEntry[] = [
   { to: '/grns', label: 'Purchases (GRN)', icon: PackageOpen, group: 'Transactions', perm: 'grns' },
   { to: '/outstanding', label: 'Outstanding', icon: Scale, group: 'Transactions', perm: 'outstanding' },
   { to: '/reports', label: 'Reports', icon: FileBarChart2, group: 'Transactions', perm: 'reports' },
+  { to: '/stock-transactions', label: 'Stock Report', icon: ArrowLeftRight, group: 'Transactions', perm: 'stock_txn' },
   { to: '/attendance', label: 'Attendance', icon: CalendarCheck, group: 'HR', perm: 'attendance' },
   { to: '/payroll', label: 'Payroll', icon: Wallet, group: 'HR', perm: 'payroll' },
   { to: '/users', label: 'System Users', icon: ShieldCheck, group: 'System', perm: 'users' },

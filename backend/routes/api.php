@@ -19,6 +19,7 @@ use App\Http\Controllers\ProductController;
 use App\Http\Controllers\SettingController;
 use App\Http\Controllers\StockController;
 use App\Http\Controllers\StockAdjustmentController;
+use App\Http\Controllers\StockTransactionController;
 use App\Http\Controllers\SettlementController;
 use App\Http\Controllers\SupplierController;
 use App\Http\Controllers\UserController;
@@ -50,6 +51,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/customer-types/{customerType}', [CustomerTypeController::class, 'destroy']);
 
     Route::get('/stocks', [StockController::class, 'index']);
+    Route::get('/stock-transactions', [StockTransactionController::class, 'index']);
     Route::get('/stock-adjustments', [StockAdjustmentController::class, 'index']);
     Route::get('/stock-adjustments/lots/{item}', [StockAdjustmentController::class, 'lots']);
     Route::post('/stock-adjustments', [StockAdjustmentController::class, 'store']);
