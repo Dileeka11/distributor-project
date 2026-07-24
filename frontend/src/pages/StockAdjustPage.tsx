@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { SlidersHorizontal, Plus, Minus, Package, Layers } from 'lucide-react';
+import { SlidersHorizontal, Plus, Minus, Package, Layers, FolderOpen } from 'lucide-react';
 import { http, apiErrorMessage } from '@/lib/http';
 import { fmt, fmt0, prettyDate } from '@/lib/format';
 import { toast } from '@/lib/toast';
@@ -11,6 +11,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Field, Input, Select, Textarea } from '@/components/ui/Field';
 import { Segmented } from '@/components/ui/Common';
 import { SearchSelect } from '@/components/ui/SearchSelect';
+import { ItemPickerModal } from '@/components/ItemPickerModal';
 import type { Category, Item } from '@/types';
 
 // One stock lot of an item: opening (batch_id null) or a GRN cost-batch.
@@ -27,6 +28,7 @@ export default function StockAdjustPage() {
   const [itemId, setItemId] = useState<number | ''>('');
   const [data, setData] = useState<LotsResponse | null>(null);
   const [adjust, setAdjust] = useState<Lot | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   useEffect(() => { void http.get('/api/categories').then((r) => setCats(r.data.data)); }, []);
   useEffect(() => {
@@ -50,6 +52,7 @@ export default function StockAdjustPage() {
           {cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </Select>
         <SearchSelect items={items} value={itemId} onChange={setItemId} allLabel="Select item…" placeholder="Search item name or code…" width={300} subtitle={(x) => `${x.code} · stock ${fmt0(Number(x.stock))}`} />
+        <Button variant="subtle" icon={<FolderOpen size={15} />} onClick={() => setPickerOpen(true)} style={{ height: 40 }}>Browse Items</Button>
         {data && (
           <div className="ml-auto flex items-center gap-2.5 px-4 rounded-full border border-border" style={{ height: 40, background: 'var(--surface)' }}>
             <Package size={16} style={{ color: 'var(--accent)' }} />
@@ -94,6 +97,12 @@ export default function StockAdjustPage() {
           onSaved={() => { setAdjust(null); void loadLots(data.item.id); void http.get('/api/items', { params: { category_id: catFilter === 'All' ? undefined : catFilter } }).then((r) => setItems(r.data.data)); }}
         />
       )}
+
+      <ItemPickerModal
+        isOpen={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onSelect={setItemId}
+      />
     </div>
   );
 }

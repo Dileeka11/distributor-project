@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Warehouse, Package, Layers, Eye, AlertCircle } from 'lucide-react';
+import { Warehouse, Package, Layers, Eye, AlertCircle, FolderOpen } from 'lucide-react';
 import { http, apiErrorMessage } from '@/lib/http';
 import { fmt, fmt0, prettyDate } from '@/lib/format';
 import { toast } from '@/lib/toast';
@@ -10,6 +10,7 @@ import { Empty, SearchBar, Stat } from '@/components/ui/Common';
 import { Modal } from '@/components/ui/Modal';
 import { Select } from '@/components/ui/Field';
 import { SearchSelect } from '@/components/ui/SearchSelect';
+import { ItemPickerModal } from '@/components/ItemPickerModal';
 import type { Category, Item } from '@/types';
 
 interface Lot {
@@ -33,6 +34,7 @@ export default function LiveStockPage() {
   const [items, setItems] = useState<Item[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [quickItemId, setQuickItemId] = useState<number | ''>('');
+  const [pickerOpen, setPickerOpen] = useState(false);
   
   // Drill-down lot view
   const [activeItemId, setActiveItemId] = useState<number | null>(null);
@@ -143,15 +145,25 @@ export default function LiveStockPage() {
 
         <div className="flex flex-col gap-1">
           <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>Quick Find (dropdown)</span>
-          <SearchSelect
-            items={items}
-            value={quickItemId}
-            onChange={setQuickItemId}
-            allLabel="Search & select item…"
-            placeholder="Type code or name…"
-            width={300}
-            subtitle={(x) => `${x.code} · stock ${fmt0(Number(x.stock))}`}
-          />
+          <div className="flex gap-2">
+            <SearchSelect
+              items={items}
+              value={quickItemId}
+              onChange={setQuickItemId}
+              allLabel="Search & select item…"
+              placeholder="Type code or name…"
+              width={300}
+              subtitle={(x) => `${x.code} · stock ${fmt0(Number(x.stock))}`}
+            />
+            <Button
+              variant="subtle"
+              icon={<FolderOpen size={15} />}
+              onClick={() => setPickerOpen(true)}
+              style={{ height: 40 }}
+            >
+              Browse Items
+            </Button>
+          </div>
         </div>
 
         <div className="flex flex-col gap-1 flex-1 min-w-[200px]">
@@ -322,6 +334,12 @@ export default function LiveStockPage() {
           )}
         </Modal>
       )}
+
+      <ItemPickerModal
+        isOpen={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onSelect={setActiveItemId}
+      />
     </div>
   );
 }
