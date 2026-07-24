@@ -28,6 +28,15 @@ export function prettyDate(iso: string): string {
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+/** Time of day from a timestamp, e.g. "02:45 PM". Empty when there is none. */
+export function prettyTime(ts: string | null | undefined): string {
+  if (!ts) return '';
+  // MySQL hands back "2026-07-24 14:45:03" — Safari needs the ISO "T".
+  const d = new Date(ts.includes('T') ? ts : ts.replace(' ', 'T'));
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+}
+
 export function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }

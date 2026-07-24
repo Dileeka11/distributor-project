@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeftRight, ArrowDownToLine, ArrowUpFromLine, Printer, FolderOpen } from 'lucide-react';
 import { http } from '@/lib/http';
-import { fmt0, prettyDate } from '@/lib/format';
+import { fmt0, prettyDate, prettyTime } from '@/lib/format';
 import { useSettings } from '@/store/settings';
 import { PageHead } from '@/components/PageHead';
 import { Button } from '@/components/ui/Button';
@@ -60,7 +60,7 @@ export default function StockTransactionsPage() {
     if (!w) return;
     const range = from || to ? `${from ? prettyDate(from) : '…'} → ${to ? prettyDate(to) : '…'}` : 'All dates';
     const tr = rows.map((r) => `<tr>
-      <td>${r.date ? prettyDate(r.date) : '—'}</td><td class="mono">${r.item_code}</td><td>${r.item_name}</td>
+      <td>${r.date ? prettyDate(r.date) : '—'}${prettyTime(r.created_at) ? `<div class="t">${prettyTime(r.created_at)}</div>` : ''}</td><td class="mono">${r.item_code}</td><td>${r.item_name}</td>
       <td class="mono">${r.source}</td><td class="r">${r.qty_in || ''}</td><td class="r">${r.qty_out || ''}</td><td>${r.remark ?? ''}</td>
     </tr>`).join('');
     w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Stock transactions — ${itemName}</title>
@@ -69,7 +69,8 @@ export default function StockTransactionsPage() {
       table{width:100%;border-collapse:collapse;font-size:12px;margin-top:16px}
       th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#777;padding:7px 6px;border-bottom:2px solid #d8dce2}
       th.r,td.r{text-align:right}td{padding:6px;border-bottom:1px solid #eef0f2}.mono{font-family:Consolas,monospace}
-      .tot{margin-top:14px;display:flex;gap:26px;font-size:13px;font-weight:700}</style></head><body>
+      .tot{margin-top:14px;display:flex;gap:26px;font-size:13px;font-weight:700}
+      .t{color:#8a9099;font-size:10.5px;margin-top:1px}</style></head><body>
       <h1>${settings.company || 'Distributor'} — Stock transactions</h1>
       <div class="sub">${itemName} · ${range} · generated ${prettyDate(new Date().toISOString())}</div>
       <table><thead><tr><th>Date</th><th>Item</th><th>Name</th><th>Source</th><th class="r">In</th><th class="r">Out</th><th>Remark</th></tr></thead>
@@ -116,7 +117,10 @@ export default function StockTransactionsPage() {
             <tbody>
               {paginated.map((r, i) => (
                 <tr key={i}>
-                  <td className="text-[12.5px] whitespace-nowrap" style={{ color: 'var(--text-muted)' }}>{r.date ? prettyDate(r.date) : '—'}</td>
+                  <td className="text-[12.5px] whitespace-nowrap" style={{ color: 'var(--text-muted)' }}>
+                    <div>{r.date ? prettyDate(r.date) : '—'}</div>
+                    {prettyTime(r.created_at) && <div className="text-[11.5px]" style={{ color: 'var(--text-faint)' }}>{prettyTime(r.created_at)}</div>}
+                  </td>
                   <td><div className="mono font-semibold text-[12.5px]">{r.item_code}</div><div className="text-[12px]" style={{ color: 'var(--text-muted)' }}>{r.item_name}</div></td>
                   <td className="mono text-[12.5px] font-medium">{r.source}</td>
                   <td className="num">{r.qty_in ? <Badge kind="green">+{fmt0(r.qty_in)}</Badge> : <span style={{ color: 'var(--text-faint)' }}>—</span>}</td>

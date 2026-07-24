@@ -6,6 +6,7 @@ use App\Http\Requests\StoreGrnRequest;
 use App\Models\Grn;
 use App\Models\Item;
 use App\Models\ItemBatch;
+use App\Models\StockAdjustment;
 use App\Models\Supplier;
 use App\Services\NumberService;
 use App\Services\SettlementService;
@@ -133,7 +134,11 @@ class GrnController extends Controller
         DB::transaction(function () use ($grn) {
             $ids = $grn->lines()->pluck('item_id')->all();
             // Cancelling already removed them, but never leave a batch orphaned:
-            // a NULL grn_id would detach that stock from its cost lot.
+            // a NULL grn_id would detach that stock from its cost lot. Same for
+            // adjustments left behind by a GRN cancelled before that was fixed.
+            $batchIds = ItemBatch::query()->where('grn_id', $grn->id)->pluck('id')->all();
+            StockAdjustment::query()->where('grn_id', $grn->id)
+                ->when($batchIds, fn ($q) => $q->orWhereIn('batch_id', $batchIds))->delete();
             ItemBatch::query()->where('grn_id', $grn->id)->delete();
             $grn->delete(); // lines cascade; stock/payable already reversed at cancel
             app(StockService::class)->projectMany($ids);
@@ -246,24 +251,41 @@ class GrnController extends Controller
         $grn->loadMissing('lines');
 
         // Heal first: a lot wrongly restored into opening stock by an older
-        // cancel is pulled back into its own cost batch, so the check below
-        // sees what was genuinely consumed rather than stale drift.
+        // cancel is pulled back into its own cost batch, so the quantities
+        // below reflect what these lots really hold.
         app(StockService::class)->reconcileMany($grn->lines->pluck('item_id')->all());
 
         $batches = ItemBatch::query()->where('grn_id', $grn->id)->lockForUpdate()->get();
-        foreach ($batches as $batch) {
-            $consumed = (int) $batch->qty_in - (int) $batch->qty_remaining;
-            if ($consumed > 0) {
-                $name = optional(Item::query()->find($batch->item_id))->name ?? 'this item';
+        $batchIds = $batches->pluck('id')->all();
+
+        if ($batchIds) {
+            // A sale is the one thing we cannot undo from here — that stock has
+            // left on an invoice. Adjustments we clean up ourselves, below.
+            $sold = DB::table('invoice_lines')
+                ->join('invoices', 'invoices.id', '=', 'invoice_lines.invoice_id')
+                ->join('items', 'items.id', '=', 'invoice_lines.item_id')
+                ->whereNull('invoices.cancelled_at')
+                ->whereIn('invoice_lines.batch_id', $batchIds)
+                ->get(['invoices.no', 'items.name']);
+
+            if ($sold->isNotEmpty()) {
+                $refs = $sold->pluck('no')->unique()->implode(', ');
+                $names = $sold->pluck('name')->unique()->implode(', ');
                 abort(
                     422,
-                    "Cannot modify this GRN — {$consumed} unit(s) of '{$name}' received on it have already been sold or adjusted. Reverse those first."
+                    "Cannot cancel or edit this GRN — stock it received ({$names}) has already been sold on {$refs}. Cancel {$refs} first."
                 );
             }
+
+            // Manual adjustments belong to the lots they were made against, so
+            // they go with them — their quantity must not linger in opening stock.
+            StockAdjustment::query()->whereIn('batch_id', $batchIds)->delete();
         }
 
-        foreach ($grn->lines as $line) {
-            Item::query()->whereKey($line->item_id)->decrement('stock', (int) $line->qty);
+        // What a lot currently holds is exactly what this GRN still contributes
+        // to item stock: received, less anything the adjustments just dropped.
+        foreach ($batches as $batch) {
+            Item::query()->whereKey($batch->item_id)->decrement('stock', (int) $batch->qty_remaining);
         }
 
         // Drop the cost-batches this GRN created (none have been sold from / all covered).
