@@ -11,6 +11,7 @@ import LoginPage from '@/pages/LoginPage';
 const DashboardPage = lazy(() => import('@/pages/DashboardPage'));
 const ItemsPage = lazy(() => import('@/pages/ItemsPage'));
 const ProductsPage = lazy(() => import('@/pages/ProductsPage'));
+const StockAdjustPage = lazy(() => import('@/pages/StockAdjustPage'));
 const SuppliersPage = lazy(() => import('@/pages/SuppliersPage'));
 const CustomersPage = lazy(() => import('@/pages/CustomersPage'));
 const InvoicesPage = lazy(() => import('@/pages/InvoicesPage'));
@@ -59,6 +60,7 @@ export default function App() {
         <Route index element={<Guard perm="dashboard"><DashboardPage /></Guard>} />
         <Route path="items" element={<Guard perm="items"><ItemsPage /></Guard>} />
         <Route path="products" element={<Guard perm="products"><ProductsPage /></Guard>} />
+        <Route path="stock-adjust" element={<Guard perm="stock_adjust"><StockAdjustPage /></Guard>} />
         <Route path="suppliers" element={<Guard perm="suppliers"><SuppliersPage /></Guard>} />
         <Route path="customers" element={<Guard perm="customers"><CustomersPage /></Guard>} />
         <Route path="employees" element={<Guard perm="employees"><EmployeesPage /></Guard>} />
