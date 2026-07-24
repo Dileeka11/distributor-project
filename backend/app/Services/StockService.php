@@ -26,6 +26,8 @@ class StockService
             return;
         }
 
+        $this->reconcile($itemId, (int) $item->stock);
+
         $batches = ItemBatch::query()
             ->where('item_id', $itemId)
             ->where('qty_remaining', '>', 0)
@@ -60,11 +62,79 @@ class StockService
         }
     }
 
+    /**
+     * Pull drifted quantity back into the cost-batch it belongs to.
+     *
+     * A batch may only be short by what was genuinely taken from it: live
+     * invoice lines and manual adjustments booked against that batch. Any other
+     * gap is drift from a restore that returned the quantity to opening stock
+     * instead of its own cost lot, so we claim it back from opening — never
+     * beyond what opening actually holds, so stock is only ever moved between
+     * lots, never invented.
+     */
+    public function reconcile(int $itemId, ?int $stock = null): void
+    {
+        $batches = ItemBatch::query()->where('item_id', $itemId)
+            ->lockForUpdate()->get(['id', 'qty_in', 'qty_remaining']);
+        if ($batches->isEmpty()) {
+            return;
+        }
+
+        $stock = $stock ?? (int) DB::table('items')->where('id', $itemId)->value('stock');
+        $ids = $batches->pluck('id')->all();
+
+        $sold = DB::table('invoice_lines')
+            ->join('invoices', 'invoices.id', '=', 'invoice_lines.invoice_id')
+            ->whereNull('invoices.cancelled_at')
+            ->whereIn('invoice_lines.batch_id', $ids)
+            ->groupBy('invoice_lines.batch_id')
+            ->selectRaw('invoice_lines.batch_id AS b, SUM(invoice_lines.qty) AS q')
+            ->pluck('q', 'b');
+
+        $adjusted = DB::table('stock_adjustments')
+            ->whereIn('batch_id', $ids)
+            ->groupBy('batch_id')
+            ->selectRaw('batch_id AS b, SUM(qty) AS q')
+            ->pluck('q', 'b');
+
+        $held = (int) $batches->sum('qty_remaining');
+        foreach ($batches as $b) {
+            $expected = max(0, (int) $b->qty_in - (int) ($sold[$b->id] ?? 0) + (int) ($adjusted[$b->id] ?? 0));
+            $delta = $expected - (int) $b->qty_remaining;
+            if ($delta > 0) {
+                // Only ever reclaim what is actually sitting loose in opening.
+                $delta = min($delta, max(0, $stock - $held));
+            }
+            if ($delta === 0) {
+                continue;
+            }
+            ItemBatch::query()->whereKey($b->id)->update(['qty_remaining' => (int) $b->qty_remaining + $delta]);
+            $held += $delta;
+        }
+    }
+
+    /** @param iterable<int> $itemIds */
+    public function reconcileMany(iterable $itemIds): void
+    {
+        foreach ($this->uniqueIds($itemIds) as $id) {
+            $this->reconcile($id);
+        }
+    }
+
     /** @param iterable<int> $itemIds */
     public function projectMany(iterable $itemIds): void
     {
-        foreach (array_unique(array_map('intval', is_array($itemIds) ? $itemIds : iterator_to_array($itemIds))) as $id) {
+        foreach ($this->uniqueIds($itemIds) as $id) {
             $this->project($id);
         }
+    }
+
+    /**
+     * @param  iterable<int>  $itemIds
+     * @return array<int>
+     */
+    private function uniqueIds(iterable $itemIds): array
+    {
+        return array_unique(array_map('intval', is_array($itemIds) ? $itemIds : iterator_to_array($itemIds)));
     }
 }

@@ -245,27 +245,20 @@ class GrnController extends Controller
     {
         $grn->loadMissing('lines');
 
+        // Heal first: a lot wrongly restored into opening stock by an older
+        // cancel is pulled back into its own cost batch, so the check below
+        // sees what was genuinely consumed rather than stale drift.
+        app(StockService::class)->reconcileMany($grn->lines->pluck('item_id')->all());
+
         $batches = ItemBatch::query()->where('grn_id', $grn->id)->lockForUpdate()->get();
         foreach ($batches as $batch) {
-            $missing = (int) $batch->qty_in - (int) $batch->qty_remaining;
-            if ($missing > 0) {
-                // Calculate current loose/opening stock for this item
-                $item = Item::query()->whereKey($batch->item_id)->lockForUpdate()->first();
-                if ($item) {
-                    $held = (int) ItemBatch::query()->where('item_id', $item->id)->sum('qty_remaining');
-                    $loose = (int) $item->stock - $held;
-
-                    if ($loose >= $missing) {
-                        // Restore the missing quantity to this batch from loose/opening stock
-                        $batch->qty_remaining = $batch->qty_in;
-                        $batch->save();
-                    } else {
-                        abort(
-                            422,
-                            "Cannot modify this GRN — some received stock of '{$item->name}' has already been sold, and there is not enough opening stock to cover the difference."
-                        );
-                    }
-                }
+            $consumed = (int) $batch->qty_in - (int) $batch->qty_remaining;
+            if ($consumed > 0) {
+                $name = optional(Item::query()->find($batch->item_id))->name ?? 'this item';
+                abort(
+                    422,
+                    "Cannot modify this GRN — {$consumed} unit(s) of '{$name}' received on it have already been sold or adjusted. Reverse those first."
+                );
             }
         }
 
