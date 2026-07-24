@@ -9,6 +9,7 @@ use App\Models\Item;
 use App\Models\ItemBatch;
 use App\Services\NumberService;
 use App\Services\SettlementService;
+use App\Services\StockService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -54,6 +55,7 @@ class InvoiceController extends Controller
             ]);
 
             $this->applyInvoiceData($invoice, $data, $taxRate);
+            app(StockService::class)->projectMany(collect($data['lines'])->pluck('item_id')->all());
 
             return $invoice;
         });
@@ -80,11 +82,13 @@ class InvoiceController extends Controller
         $taxRate = $this->allowedTaxRate($request, $data);
 
         DB::transaction(function () use ($invoice, $data, $taxRate) {
+            $ids = $invoice->lines()->pluck('item_id')->all();
             // Undo the old invoice's effects, then re-apply from the edited data.
             $this->reverseInvoiceEffects($invoice);
             $invoice->lines()->delete();
             $invoice->cheques()->delete();
             $this->applyInvoiceData($invoice, $data, $taxRate);
+            app(StockService::class)->projectMany(array_merge($ids, collect($data['lines'])->pluck('item_id')->all()));
         });
 
         return response()->json([
@@ -101,6 +105,7 @@ class InvoiceController extends Controller
         abort_if((bool) $invoice->cancelled_at, 422, 'This invoice is already cancelled.');
 
         DB::transaction(function () use ($invoice, $posting) {
+            $ids = $invoice->lines()->pluck('item_id')->all();
             $posting->purgeSettlementsForInvoice($invoice);
             $invoice->refresh();
             $this->reverseInvoiceEffects($invoice); // restores item stock + reverses receivable
@@ -111,6 +116,7 @@ class InvoiceController extends Controller
                 'advance' => 0,
                 'status' => 'unpaid',
             ])->save();
+            app(StockService::class)->projectMany($ids);
         });
 
         return response()->json(['data' => $invoice->fresh(['customer', 'lines'])]);

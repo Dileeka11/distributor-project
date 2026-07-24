@@ -9,6 +9,7 @@ use App\Models\ItemBatch;
 use App\Models\Supplier;
 use App\Services\NumberService;
 use App\Services\SettlementService;
+use App\Services\StockService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -54,6 +55,7 @@ class GrnController extends Controller
             ]);
 
             $this->applyGrnData($grn, $data, $taxRate);
+            app(StockService::class)->projectMany(collect($data['lines'])->pluck('item_id')->all());
 
             return $grn;
         });
@@ -80,11 +82,13 @@ class GrnController extends Controller
         $taxRate = $this->allowedTaxRate($request, $data);
 
         DB::transaction(function () use ($grn, $data, $taxRate) {
+            $ids = $grn->lines()->pluck('item_id')->all();
             // Undo the old GRN's effects, then re-apply from the edited data.
             $this->reverseGrnEffects($grn);
             $grn->lines()->delete();
             $grn->cheques()->delete();
             $this->applyGrnData($grn, $data, $taxRate);
+            app(StockService::class)->projectMany(array_merge($ids, collect($data['lines'])->pluck('item_id')->all()));
         });
 
         return response()->json([
@@ -102,6 +106,7 @@ class GrnController extends Controller
         abort_if((bool) $grn->cancelled_at, 422, 'This GRN is already cancelled.');
 
         DB::transaction(function () use ($grn, $posting) {
+            $ids = $grn->lines()->pluck('item_id')->all();
             $posting->purgeSettlementsForGrn($grn);
             $grn->refresh();
             $this->reverseGrnEffects($grn); // removes received stock + batches, reverses payable
@@ -112,6 +117,7 @@ class GrnController extends Controller
                 'advance' => 0,
                 'status' => 'unpaid',
             ])->save();
+            app(StockService::class)->projectMany($ids);
         });
 
         return response()->json(['data' => $grn->fresh(['supplier', 'lines'])]);

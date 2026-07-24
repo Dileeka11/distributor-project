@@ -7,6 +7,7 @@ use App\Models\Item;
 use App\Models\ItemBatch;
 use App\Models\Product;
 use App\Services\NumberService;
+use App\Services\StockService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -91,6 +92,11 @@ class ProductController extends Controller
                 $this->consume($c, $units);
             }
 
+            // Project the components + the new product item into the stock ledger.
+            $ids = array_map(fn ($c) => (int) $c['item']->id, $components);
+            $ids[] = (int) $item->id;
+            app(StockService::class)->projectMany($ids);
+
             return $product;
         });
 
@@ -133,6 +139,10 @@ class ProductController extends Controller
                 $this->consume($c, $units);
             }
             Item::query()->whereKey($product->item_id)->increment('stock', $units);
+
+            $ids = array_map(fn ($c) => (int) $c['item']->id, $components);
+            $ids[] = (int) $product->item_id;
+            app(StockService::class)->projectMany($ids);
         });
 
         return response()->json([
@@ -152,6 +162,7 @@ class ProductController extends Controller
         DB::transaction(function () use ($product) {
             $product->loadMissing(['item', 'components']);
             $remaining = $product->item ? (int) $product->item->stock : 0;
+            $componentIds = $product->components->pluck('item_id')->map(fn ($v) => (int) $v)->all();
 
             if ($remaining > 0) {
                 foreach ($product->components as $c) {
@@ -159,12 +170,16 @@ class ProductController extends Controller
                 }
             }
 
-            // Deleting the item cascades to the product + its components.
+            // Deleting the item cascades to the product + its components (and the
+            // product item's own stock rows).
             if ($product->item) {
                 $product->item->delete();
             } else {
                 $product->delete();
             }
+
+            // Components got stock back; re-project them.
+            app(StockService::class)->projectMany($componentIds);
         });
 
         return response()->json(['message' => 'Deleted']);

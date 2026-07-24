@@ -17,6 +17,7 @@ use App\Http\Controllers\LeaveController;
 use App\Http\Controllers\PayrollController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\SettingController;
+use App\Http\Controllers\StockController;
 use App\Http\Controllers\SettlementController;
 use App\Http\Controllers\SupplierController;
 use App\Http\Controllers\UserController;
@@ -47,6 +48,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/customer-types/{customerType}', [CustomerTypeController::class, 'update']);
     Route::delete('/customer-types/{customerType}', [CustomerTypeController::class, 'destroy']);
 
+    Route::get('/stocks', [StockController::class, 'index']);
     Route::get('/items/{item}/batches', [ItemController::class, 'batches']);
     Route::apiResource('items', ItemController::class)->only(['index', 'store', 'update', 'destroy']);
 

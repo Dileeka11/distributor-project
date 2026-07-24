@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreItemRequest;
 use App\Models\Item;
+use App\Services\StockService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -39,6 +40,7 @@ class ItemController extends Controller
     public function store(StoreItemRequest $request): JsonResponse
     {
         $item = Item::query()->create($request->validated());
+        app(StockService::class)->project((int) $item->id); // opening stock → ledger
 
         return response()->json(['data' => $item->load('category:id,name')], 201);
     }
@@ -46,6 +48,7 @@ class ItemController extends Controller
     public function update(StoreItemRequest $request, Item $item): JsonResponse
     {
         $item->update($request->validated());
+        app(StockService::class)->project((int) $item->id); // opening-stock edits → ledger
 
         return response()->json(['data' => $item->fresh('category:id,name')]);
     }

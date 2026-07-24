@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, Edit2, Trash2, Box, ChevronDown, Search } from 'lucide-react';
+import { Plus, Edit2, Trash2, Box, Layers, ChevronDown, Search } from 'lucide-react';
 import { http, apiErrorMessage } from '@/lib/http';
-import { fmt, fmt0 } from '@/lib/format';
+import { fmt, fmt0, prettyDate } from '@/lib/format';
 import { toast, confirmDelete } from '@/lib/toast';
 import { PageHead } from '@/components/PageHead';
 import { Button } from '@/components/ui/Button';
@@ -9,7 +9,15 @@ import { Badge, stockBadge } from '@/components/ui/Badge';
 import { Empty } from '@/components/ui/Common';
 import { Modal } from '@/components/ui/Modal';
 import { Field, Input, Select, MoneyInput } from '@/components/ui/Field';
+import { SearchBar } from '@/components/ui/Common';
 import type { Category, Item } from '@/types';
+
+// One row of the per-lot stock ledger (item + GRN).
+interface StockRow {
+  item_id: number; item_code: string; item_name: string; item_total: number;
+  grn_id: number; grn_no: string | null; grn_date: string | null;
+  qty: number; unit_cost: string | number | null;
+}
 
 interface ItemForm {
   code: string; name: string; category_id: number | '';
@@ -24,6 +32,7 @@ export default function ItemsPage() {
   const [catFilter, setCatFilter] = useState<'All' | number>('All');
   const [itemId, setItemId] = useState<number | ''>('');
   const [editing, setEditing] = useState<Item | 'new' | null>(null);
+  const [ledger, setLedger] = useState(false);
 
   const load = () => http.get('/api/items', { params: { category_id: catFilter === 'All' ? undefined : catFilter } }).then((r) => setItems(r.data.data));
   const loadCats = () => http.get('/api/categories').then((r) => setCats(r.data.data));
@@ -40,7 +49,12 @@ export default function ItemsPage() {
       <PageHead
         title="Item Master"
         sub={`${total} products · manage codes, categories and pricing tiers.`}
-        actions={<Button variant="primary" icon={<Plus size={16} />} onClick={() => setEditing('new')}>Add Item</Button>}
+        actions={
+          <>
+            <Button variant="subtle" icon={<Layers size={16} />} onClick={() => setLedger(true)}>Stock ledger</Button>
+            <Button variant="primary" icon={<Plus size={16} />} onClick={() => setEditing('new')}>Add Item</Button>
+          </>
+        }
       />
 
       <div className="flex items-center gap-2.5 mb-4 flex-wrap">
@@ -99,7 +113,73 @@ export default function ItemsPage() {
           onSaved={() => { setEditing(null); void load(); }}
         />
       )}
+
+      {ledger && <StockLedgerModal onClose={() => setLedger(false)} />}
     </div>
+  );
+}
+
+// Per-lot stock ledger: every item's stock broken down by the GRN it came from
+// (plus an "Opening" row), which moves as GRNs are received and invoices sell.
+function StockLedgerModal({ onClose }: { onClose: () => void }) {
+  const [rows, setRows] = useState<StockRow[]>([]);
+  const [q, setQ] = useState('');
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => { void http.get('/api/stocks').then((r) => setRows(r.data.data)).finally(() => setLoaded(true)); }, []);
+
+  const ql = q.trim().toLowerCase();
+  const shown = ql ? rows.filter((r) => r.item_name.toLowerCase().includes(ql) || r.item_code.toLowerCase().includes(ql)) : rows;
+
+  // Group the flat rows by item, preserving order.
+  const groups: { code: string; name: string; total: number; lots: StockRow[] }[] = [];
+  const byItem = new Map<number, number>();
+  for (const r of shown) {
+    let gi = byItem.get(r.item_id);
+    if (gi === undefined) { gi = groups.length; byItem.set(r.item_id, gi); groups.push({ code: r.item_code, name: r.item_name, total: Number(r.item_total), lots: [] }); }
+    groups[gi].lots.push(r);
+  }
+  const grandTotal = groups.reduce((s, g) => s + g.total, 0);
+
+  return (
+    <Modal
+      lg
+      title={<span className="flex items-center gap-2.5"><Layers size={20} style={{ color: 'var(--blue)' }} /> Stock ledger — by GRN lot</span>}
+      onClose={onClose}
+      footer={
+        <>
+          <span className="mr-auto text-[13px]" style={{ color: 'var(--text-muted)' }}>{groups.length} items · <b className="mono">{fmt0(grandTotal)}</b> units in stock</span>
+          <Button variant="primary" onClick={onClose}>Close</Button>
+        </>
+      }
+    >
+      <div className="mb-3"><SearchBar value={q} onChange={setQ} placeholder="Search item name or code…" /></div>
+      <div className="card overflow-hidden">
+        <div style={{ maxHeight: 420, overflow: 'auto' }}>
+          <table className="tbl">
+            <thead><tr><th>Item</th><th>Source</th><th>Date</th><th className="num">Unit cost</th><th className="num">Qty</th></tr></thead>
+            <tbody>
+              {groups.map((g) => g.lots.map((l, i) => (
+                <tr key={`${g.code}-${l.grn_id}`}>
+                  <td>
+                    {i === 0
+                      ? <div><div className="mono font-semibold">{g.code}</div><div className="text-[12px] font-medium">{g.name}</div></div>
+                      : <span style={{ color: 'var(--text-faint)' }}>↳</span>}
+                  </td>
+                  <td>{l.grn_id === 0
+                    ? <Badge kind="gray">Opening</Badge>
+                    : <span className="mono font-semibold">{l.grn_no ?? `GRN #${l.grn_id}`}</span>}</td>
+                  <td className="text-[12px] whitespace-nowrap" style={{ color: 'var(--text-muted)' }}>{l.grn_date ? prettyDate(l.grn_date) : '—'}</td>
+                  <td className="num money" style={{ color: 'var(--text-muted)' }}>{l.unit_cost != null ? fmt(Number(l.unit_cost)) : '—'}</td>
+                  <td className="num"><Badge kind={Number(l.qty) > 0 ? 'green' : 'red'}>{fmt0(Number(l.qty))}</Badge></td>
+                </tr>
+              )))}
+            </tbody>
+          </table>
+        </div>
+        {loaded && groups.length === 0 && <div className="text-center py-8 text-[13px]" style={{ color: 'var(--text-faint)' }}>No stock records.</div>}
+      </div>
+    </Modal>
   );
 }
 
