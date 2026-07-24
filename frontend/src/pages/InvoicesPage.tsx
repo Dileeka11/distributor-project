@@ -211,6 +211,9 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
   // stock + anything received without a batch). Shown as its own pickable row.
   const looseFor = (it: Item) =>
     Number(it.stock) - (batchesByItem[Number(it.id)] ?? []).reduce((s, b) => s + Number(b.qty_remaining), 0);
+  // Selling price for an item's old/opening stock = price minus its opening discount.
+  const oldStockPrice = (it: Item) =>
+    Number(it.wholesale_price) * (1 - (Number(it.opening_discount ?? 0) || 0) / 100);
 
   // Stock still available for one line, given which pool it draws from (a chosen
   // cost-batch, the old-stock pool, or — when no batches — plain item stock),
@@ -345,10 +348,18 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
                       subtitle={(x) => `${x.code} · stock ${fmt0(Number(x.stock) - usedElsewhere(x.id, i))}`}
                     />
                     {batchesFor(l).length > 0 && (
-                      <Select value={l.batch_id === '' ? '' : String(l.batch_id)} onChange={(e) => setLine(i, { batch_id: e.target.value === '' ? '' : Number(e.target.value) })} style={{ height: 32, fontSize: 12, marginTop: 6 }}>
+                      <Select value={l.batch_id === '' ? '' : String(l.batch_id)} onChange={(e) => {
+                        const v = e.target.value === '' ? '' : Number(e.target.value);
+                        // Old stock (0) sells at the item's discounted price; a GRN
+                        // lot at the full selling price.
+                        const patch: Partial<DraftLine> = { batch_id: v };
+                        if (it && v === 0) patch.price = oldStockPrice(it).toFixed(2);
+                        else if (it && typeof v === 'number') patch.price = Number(it.wholesale_price).toFixed(2);
+                        setLine(i, patch);
+                      }} style={{ height: 32, fontSize: 12, marginTop: 6 }}>
                         <option value="">Select stock / batch…</option>
                         {it && looseFor(it) > 0 && (
-                          <option value="0">old stock · Rs {fmt(Number(it.wholesale_price))} · {optLeft(0, looseFor(it))} left</option>
+                          <option value="0">old stock · Rs {fmt(oldStockPrice(it))}{Number(it.opening_discount ?? 0) > 0 ? ` (−${fmt(Number(it.opening_discount))}%)` : ''} · {optLeft(0, looseFor(it))} left</option>
                         )}
                         {batchesFor(l).map((b) => <option key={b.id} value={b.id}>cost Rs {fmt(b.unit_cost as number)} · {optLeft(Number(b.id), Number(b.qty_remaining))} left</option>)}
                       </Select>

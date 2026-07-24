@@ -21,10 +21,10 @@ interface StockRow {
 
 interface ItemForm {
   code: string; name: string; category_id: number | '';
-  price: string; stock: string;
+  price: string; stock: string; opening_discount: string;
 }
 
-const blankForm = (): ItemForm => ({ code: '', name: '', category_id: '', price: '', stock: '' });
+const blankForm = (): ItemForm => ({ code: '', name: '', category_id: '', price: '', stock: '', opening_discount: '' });
 
 export default function ItemsPage() {
   const [items, setItems] = useState<Item[]>([]);
@@ -242,6 +242,7 @@ function ItemModal({
         code: item.code, name: item.name, category_id: item.category_id,
         price: String(item.retail_price),
         stock: String(item.stock),
+        opening_discount: String(Number(item.opening_discount ?? 0)),
       }
     : { ...blankForm(), category_id: categories[0]?.id ?? '' });
   const [busy, setBusy] = useState(false);
@@ -264,7 +265,10 @@ function ItemModal({
         distributor_price: price,
         wholesale_price: price,
         retail_price: price,
+        // Opening stock + discount are only meaningful at creation; the server
+        // ignores them on update but they satisfy the shared validation rules.
         stock: Number(f.stock) || 0,
+        opening_discount: Number(f.opening_discount) || 0,
       };
       if (isNew) await http.post('/api/items', payload);
       else await http.put(`/api/items/${item!.id}`, payload);
@@ -304,9 +308,25 @@ function ItemModal({
           </div>
         </Field>
         <Field label="Item Price (LKR)"><MoneyInput value={f.price} onChange={(v) => setF({ ...f, price: v })} /></Field>
-        <Field label="Stock Count">
-          <Input className="mono" inputMode="numeric" value={f.stock} onChange={(e) => setF({ ...f, stock: e.target.value.replace(/\D/g, '') })} placeholder="0" />
-        </Field>
+        {isNew ? (
+          <>
+            <Field label="Opening stock count" hint="Set once, at creation. After this, stock is driven by GRNs and invoices.">
+              <Input className="mono" inputMode="numeric" value={f.stock} onChange={(e) => setF({ ...f, stock: e.target.value.replace(/\D/g, '') })} placeholder="0" />
+            </Field>
+            <Field label="Old-stock discount (%)" hint="Discount applied when selling this opening stock. Locked after creation." full>
+              <Input className="mono" inputMode="decimal" value={f.opening_discount} onChange={(e) => setF({ ...f, opening_discount: e.target.value.replace(/[^\d.]/g, '') })} placeholder="0" style={{ maxWidth: 200 }} />
+            </Field>
+          </>
+        ) : (
+          <>
+            <Field label="Current stock" hint="Managed by GRNs and invoices — not editable here.">
+              <Input className="mono" value={fmt0(item!.stock)} disabled style={{ opacity: 0.75 }} />
+            </Field>
+            <Field label="Old-stock discount (%)" hint="Set at creation — locked." full>
+              <Input className="mono" value={`${fmt(Number(item!.opening_discount ?? 0))}%`} disabled style={{ maxWidth: 200, opacity: 0.75 }} />
+            </Field>
+          </>
+        )}
       </div>
     </Modal>
     {mgrOpen && (

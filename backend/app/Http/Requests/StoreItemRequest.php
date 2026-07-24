@@ -23,7 +23,10 @@ class StoreItemRequest extends FormRequest
             'distributor_price' => ['required', 'numeric', 'min:0'],
             'wholesale_price' => ['required', 'numeric', 'min:0'],
             'retail_price' => ['required', 'numeric', 'min:0'],
+            // Opening stock + its discount are only set when the item is created;
+            // the controller ignores them on update (they can't be edited later).
             'stock' => ['required', 'integer', 'min:0'],
+            'opening_discount' => ['nullable', 'numeric', 'min:0', 'max:100'],
         ];
     }
 }

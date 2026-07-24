@@ -12,6 +12,7 @@ export interface Item {
   wholesale_price: string | number;
   retail_price: string | number;
   stock: number;
+  opening_discount?: string | number; // % off when selling old/opening stock
   // Present when this item is a composite product built from other items.
   product?: { id: ID; item_id: ID; actual_price: string | number; selling_price: string | number } | null;
 }

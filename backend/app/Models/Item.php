@@ -14,12 +14,13 @@ class Item extends Model
 
     protected $fillable = [
         'code', 'name', 'category_id',
-        'distributor_price', 'wholesale_price', 'retail_price', 'stock',
+        'distributor_price', 'wholesale_price', 'retail_price', 'stock', 'opening_discount',
     ];
 
     protected $casts = [
         // PHP < 8.1 returns numeric DB columns as strings; keep ids integers.
         'category_id' => 'integer',
+        'opening_discount' => 'decimal:2',
         'distributor_price' => 'decimal:2',
         'wholesale_price' => 'decimal:2',
         'retail_price' => 'decimal:2',

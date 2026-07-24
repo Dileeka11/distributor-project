@@ -47,8 +47,11 @@ class ItemController extends Controller
 
     public function update(StoreItemRequest $request, Item $item): JsonResponse
     {
-        $item->update($request->validated());
-        app(StockService::class)->project((int) $item->id); // opening-stock edits → ledger
+        // Opening stock + its discount are fixed at creation. Current stock is
+        // driven by GRNs / invoices, so both are ignored on edit.
+        $data = $request->validated();
+        unset($data['stock'], $data['opening_discount']);
+        $item->update($data);
 
         return response()->json(['data' => $item->fresh('category:id,name')]);
     }
