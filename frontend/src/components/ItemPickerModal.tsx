@@ -150,38 +150,38 @@ export function ItemPickerModal({ isOpen, onClose, onSelect }: ItemPickerModalPr
               )}
             </div>
 
-            {/* Items Grid Container */}
+            {/* Items List Container */}
             <div className="flex-1 overflow-y-auto min-h-0 pr-1">
-              <div className="grid grid-cols-2 gap-2">
+              <div className="flex flex-col gap-1.5">
                 {filteredItems.map((item) => {
                   const stock = Number(item.stock) || 0;
                   const badgeKind = stock > 20 ? 'green' : stock > 0 ? 'amber' : 'red';
                   return (
                     <div
                       key={item.id}
-                      className="p-3.5 rounded-lg border border-border bg-surface hover:border-accent hover:bg-surface-2 transition text-left cursor-pointer flex flex-col justify-between min-h-[96px] group"
+                      className="p-2.5 px-3.5 rounded-lg border border-border bg-surface hover:border-accent hover:bg-surface-2 transition text-left cursor-pointer flex items-center justify-between gap-4 group"
                       onClick={() => {
                         onSelect(item.id);
                         onClose();
                       }}
                     >
-                      <div>
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="mono text-[11px] uppercase font-bold" style={{ color: 'var(--text-faint)' }}>
-                            {item.code}
-                          </span>
-                          <Badge kind={badgeKind} dot>
-                            {fmt0(stock)}
-                          </Badge>
-                        </div>
-                        <div className="text-[13.5px] font-semibold mt-1.5 group-hover:text-accent transition line-clamp-2">
+                      <div className="flex items-center gap-3.5 flex-1 min-w-0">
+                        <span className="mono text-[12px] uppercase font-bold text-muted w-[90px] flex-shrink-0">
+                          {item.code}
+                        </span>
+                        <div className="text-[13.5px] font-semibold truncate group-hover:text-accent transition">
                           {item.name}
                         </div>
                       </div>
-                      <div className="text-[11.5px] mt-2 flex items-center justify-between" style={{ color: 'var(--text-muted)' }}>
-                        <span className="truncate">{item.category?.name ?? '—'}</span>
-                        <span className="mono text-[12px] font-bold text-accent opacity-0 group-hover:opacity-100 transition">
-                          Select →
+                      <div className="flex items-center gap-4 flex-shrink-0">
+                        <span className="text-[12px] text-muted max-w-[120px] truncate">
+                          {item.category?.name ?? '—'}
+                        </span>
+                        <Badge kind={badgeKind} dot>
+                          {fmt0(stock)}
+                        </Badge>
+                        <span className="mono text-[12px] font-bold text-accent opacity-0 group-hover:opacity-100 transition w-[50px] text-right">
+                          Select
                         </span>
                       </div>
                     </div>
