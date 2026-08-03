@@ -6,6 +6,7 @@ import type { Invoice } from '@/types';
 // Every measurement below comes from that artwork: the sheet is 80mm wide with a
 // 4mm margin each side, so the printable column is exactly 72mm.
 const ROLL_WIDTH_MM = 80;
+const ROLL_HEIGHT_MM = 220;
 const SIDE_MARGIN_MM = 4;
 
 // Item table column widths, as a share of the 72mm column. Qty is given a little
@@ -107,7 +108,9 @@ export function diamondInvoiceHtml(d: Invoice, variant: 'full' | 'plain' = 'full
   return `<!doctype html><html><head><meta charset="utf-8">
   <title>${esc(d.no)} — Invoice</title>
   <style>
-    @page { size: ${ROLL_WIDTH_MM}mm auto; margin: 0; }
+    /* Both lengths are required: "80mm auto" is invalid CSS, and a browser that
+       drops the rule silently prints the slip on whatever paper is default. */
+    @page { size: ${ROLL_WIDTH_MM}mm ${ROLL_HEIGHT_MM}mm; margin: 0; }
     * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     html, body { margin: 0; padding: 0; background: #fff; }
     body {
@@ -206,17 +209,4 @@ export function diamondInvoiceHtml(d: Invoice, variant: 'full' | 'plain' = 'full
     <div class="sign-cap">Customer Signature</div>
   </div>
   </body></html>`;
-}
-
-/**
- * Open the invoice in its own window and leave it on screen. Printing is the
- * operator's call from there, so a mis-keyed invoice never reaches the roll.
- */
-export function openDiamondInvoice(d: Invoice): void {
-  // Roughly the on-screen size of an 80mm roll, plus room for browser chrome.
-  const w = window.open('', '_blank', 'width=460,height=880');
-  if (!w) return;
-  w.document.write(diamondInvoiceHtml(d, (d.lines ?? []).length > 0 ? 'full' : 'plain'));
-  w.document.close();
-  w.focus();
 }

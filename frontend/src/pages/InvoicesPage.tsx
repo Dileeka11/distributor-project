@@ -12,7 +12,7 @@ import { SearchBar, Empty, Segmented, Stat, Pagination } from '@/components/ui/C
 import { Modal } from '@/components/ui/Modal';
 import { Field, Select, MoneyInput, Input } from '@/components/ui/Field';
 import { SearchSelect } from '@/components/ui/SearchSelect';
-import { openDiamondInvoice } from '@/lib/diamondInvoice';
+import { DiamondInvoiceModal } from '@/components/DiamondInvoiceModal';
 import { Switch } from '@/components/ui/Common';
 import { useAuth } from '@/store/auth';
 import { canUse } from '@/lib/pages';
@@ -33,6 +33,7 @@ export default function InvoicesPage() {
   const [create, setCreate] = useState(params.has('create'));
   const [editInv, setEditInv] = useState<Invoice | null>(null);
   const [view, setView] = useState<Invoice | null>(null);
+  const [slip, setSlip] = useState<Invoice | null>(null);
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(25);
 
@@ -159,12 +160,13 @@ export default function InvoicesPage() {
             // The finished invoice is raised on screen straight away, so the
             // counter can read it back before anything goes to the roll.
             if (savedInvoice) {
-              openDiamondInvoice(savedInvoice);
+              setSlip(savedInvoice);
             }
           }}
         />
       )}
       {view && <ViewInvoice inv={view} onClose={() => setView(null)} />}
+      {slip && <DiamondInvoiceModal inv={slip} onClose={() => setSlip(null)} />}
     </div>
   );
 }
@@ -634,14 +636,18 @@ export function TotalRow({ k, v, big, accent }: { k: string; v: string; big?: bo
 
 function ViewInvoice({ inv, onClose }: { inv: Invoice; onClose: () => void }) {
   const [data, setData] = useState<Invoice>(inv);
+  const [slip, setSlip] = useState(false);
   useEffect(() => { void http.get(`/api/invoices/${inv.id}`).then((r) => setData(r.data.data)); }, [inv.id]);
   const st = statusBadge(data.status);
   const bal = Number(data.total) - Number(data.paid);
+
+  if (slip) return <DiamondInvoiceModal inv={data} onClose={() => setSlip(false)} />;
+
   return (
     <Modal
       title={<span className="flex items-center gap-2.5">{data.no} <Badge kind={data.type === 'cash' ? 'blue' : 'amber'}>{data.type === 'cash' ? 'Cash' : 'Credit'}</Badge></span>}
       onClose={onClose}
-      footer={<><Button variant="ghost" icon={<Printer size={15} />} onClick={() => openDiamondInvoice(data)}>Print / PDF</Button><Button variant="primary" onClick={onClose}>Close</Button></>}
+      footer={<><Button variant="ghost" icon={<Printer size={15} />} onClick={() => setSlip(true)}>Print / PDF</Button><Button variant="primary" onClick={onClose}>Close</Button></>}
     >
       <div className="flex justify-between mb-5">
         <div>
