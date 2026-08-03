@@ -61,7 +61,8 @@ class InvoiceController extends Controller
         });
 
         return response()->json([
-            'data' => $invoice->fresh(['customer', 'lines', 'cheques']),
+            // lines.item carries the item code the printed invoice prints per row.
+            'data' => $invoice->fresh(['customer', 'lines.item:id,code,name', 'cheques']),
         ], 201);
     }
 
@@ -92,7 +93,8 @@ class InvoiceController extends Controller
         });
 
         return response()->json([
-            'data' => $invoice->fresh(['customer', 'lines', 'cheques']),
+            // lines.item carries the item code the printed invoice prints per row.
+            'data' => $invoice->fresh(['customer', 'lines.item:id,code,name', 'cheques']),
         ]);
     }
 

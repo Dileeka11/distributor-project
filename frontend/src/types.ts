@@ -83,6 +83,7 @@ export interface InvoiceLine {
   qty: string | number;
   price: string | number;
   total: string | number;
+  item?: { id: ID; code: string; name: string };
 }
 
 export interface ItemBatch {
