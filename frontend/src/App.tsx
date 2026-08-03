@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from '@/store/auth';
 import { useSettings } from '@/store/settings';
 import { canAccess, firstAllowed } from '@/lib/pages';
+import { startPresenceHeartbeat } from '@/lib/sessionGuard';
 import { AppShell } from '@/components/AppShell';
 import LoginPage from '@/pages/LoginPage';
 
@@ -41,6 +42,13 @@ export default function App() {
     void load();
     void bootstrap();
   }, [bootstrap, load]);
+
+  // Records that the app is running, which is how the next visit tells a reload
+  // apart from the browser having been closed and reopened.
+  useEffect(() => {
+    if (!user) return;
+    return startPresenceHeartbeat();
+  }, [user]);
 
   if (!ready) {
     return <div className="grid place-items-center h-screen text-sm" style={{ color: 'var(--text-muted)' }}>Loading…</div>;
