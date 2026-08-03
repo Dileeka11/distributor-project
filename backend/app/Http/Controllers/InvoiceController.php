@@ -16,6 +16,16 @@ use Illuminate\Support\Facades\DB;
 
 class InvoiceController extends Controller
 {
+    /**
+     * What the printed invoice needs off each line: the item code it prints per
+     * row, and whether that item is a composite product — the printed slip only
+     * carries the distributor letterhead when a product was actually sold.
+     */
+    private const PRINT_LINE_RELATIONS = [
+        'lines.item:id,code,name',
+        'lines.item.product:id,item_id',
+    ];
+
     public function index(Request $request): JsonResponse
     {
         $q = trim((string) $request->input('q'));
@@ -38,7 +48,7 @@ class InvoiceController extends Controller
     public function show(Invoice $invoice): JsonResponse
     {
         return response()->json([
-            'data' => $invoice->load(['customer', 'lines.item:id,code,name', 'cheques']),
+            'data' => $invoice->load(['customer', ...self::PRINT_LINE_RELATIONS, 'cheques']),
         ]);
     }
 
@@ -61,8 +71,7 @@ class InvoiceController extends Controller
         });
 
         return response()->json([
-            // lines.item carries the item code the printed invoice prints per row.
-            'data' => $invoice->fresh(['customer', 'lines.item:id,code,name', 'cheques']),
+            'data' => $invoice->fresh(['customer', ...self::PRINT_LINE_RELATIONS, 'cheques']),
         ], 201);
     }
 
@@ -93,8 +102,7 @@ class InvoiceController extends Controller
         });
 
         return response()->json([
-            // lines.item carries the item code the printed invoice prints per row.
-            'data' => $invoice->fresh(['customer', 'lines.item:id,code,name', 'cheques']),
+            'data' => $invoice->fresh(['customer', ...self::PRINT_LINE_RELATIONS, 'cheques']),
         ]);
     }
 

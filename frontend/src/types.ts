@@ -83,7 +83,8 @@ export interface InvoiceLine {
   qty: string | number;
   price: string | number;
   total: string | number;
-  item?: { id: ID; code: string; name: string };
+  // `product` is set only when the item is a composite product (a PRD- code).
+  item?: { id: ID; code: string; name: string; product?: { id: ID; item_id: ID } | null };
 }
 
 export interface ItemBatch {

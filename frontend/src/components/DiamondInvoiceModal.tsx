@@ -27,10 +27,13 @@ export function DiamondInvoiceModal({ inv, onClose }: { inv: Invoice; onClose: (
     void http.get(`/api/invoices/${inv.id}`).then((r) => setData(r.data.data)).catch(() => {});
   }, [inv.id]);
 
-  const html = useMemo(
-    () => diamondInvoiceHtml(data, (data.lines ?? []).length > 0 ? 'full' : 'plain'),
-    [data],
-  );
+  // The distributor letterhead belongs on the slip only when a composite product
+  // was sold. A plain item — "clothes", say — is not a product and prints on the
+  // manufacturer-only pad.
+  const html = useMemo(() => {
+    const soldAProduct = (data.lines ?? []).some((l) => !!l.item?.product);
+    return diamondInvoiceHtml(data, soldAProduct ? 'full' : 'plain');
+  }, [data]);
 
   // Size the frame to the slip itself. Measuring the body rather than the
   // document keeps the preview the height of the printed content — the paper
