@@ -48,6 +48,14 @@ export function isNewBrowserVisit(): boolean {
   return last === null || now() - last > GRACE_MS;
 }
 
+/**
+ * True when the app was opened straight at /login. Arriving there is a request
+ * to sign in, so any session still alive is ended rather than walked past.
+ */
+export function isLoginRoute(): boolean {
+  return window.location.pathname.replace(/\/+$/, '') === '/login';
+}
+
 /** Keep the timestamp warm while the app is open. Returns a cleanup function. */
 export function startPresenceHeartbeat(): () => void {
   markSeen();
