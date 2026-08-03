@@ -29,21 +29,39 @@ const DISTRIBUTOR = {
   name: 'RAINCOUTURE',
   address: ['164/2, Uduwan, Homagama.', 'Tel: 077 546 1134'],
   wordmark: 'RainCouture',
-  tagline: 'Step Out in Style',
+  tagline: 'StepOutinStyle',
 };
 
-/** RainCouture mark — an umbrella seen from above, drawn so it scales cleanly. */
+/**
+ * RainCouture mark — the canopy seen from above.
+ *
+ * Eight panels meet at eight points, and each panel's outer edge scallops back
+ * toward the centre, which is what gives the silhouette its umbrella shape
+ * rather than a plain disc. Ribs read as white gaps between the panels, and the
+ * ferrule sits above the top point. Drawn as vectors so it stays crisp at the
+ * ~14mm it prints at.
+ */
 const RAINCOUTURE_MARK = `
-  <svg class="dist-mark" viewBox="0 0 100 100" role="img" aria-label="RainCouture">
-    <path d="M50,50 L50,4 A46,46 0 0,1 82.53,17.47 Z" fill="#4a4a4a"/>
-    <path d="M50,50 L82.53,17.47 A46,46 0 0,1 96,50 Z" fill="#9b9b9b"/>
-    <path d="M50,50 L96,50 A46,46 0 0,1 82.53,82.53 Z" fill="#4a4a4a"/>
-    <path d="M50,50 L82.53,82.53 A46,46 0 0,1 50,96 Z" fill="#9b9b9b"/>
-    <path d="M50,50 L50,96 A46,46 0 0,1 17.47,82.53 Z" fill="#4a4a4a"/>
-    <path d="M50,50 L17.47,82.53 A46,46 0 0,1 4,50 Z" fill="#9b9b9b"/>
-    <path d="M50,50 L4,50 A46,46 0 0,1 17.47,17.47 Z" fill="#4a4a4a"/>
-    <path d="M50,50 L17.47,17.47 A46,46 0 0,1 50,4 Z" fill="#9b9b9b"/>
-    <circle cx="50" cy="50" r="6.5" fill="#fff"/>
+  <svg class="dist-mark" viewBox="0 0 100 104" role="img" aria-label="RainCouture">
+    <defs>
+      <linearGradient id="rcA" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#3c3c3c"/><stop offset="1" stop-color="#909090"/>
+      </linearGradient>
+      <linearGradient id="rcB" x1="1" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#9c9c9c"/><stop offset="1" stop-color="#4c4c4c"/>
+      </linearGradient>
+    </defs>
+    <g stroke="#fff" stroke-width="1.6" stroke-linejoin="round">
+      <path d="M50,56 L50,12 Q61.48,28.28 81.11,24.89 Z" fill="url(#rcA)"/>
+      <path d="M50,56 L81.11,24.89 Q77.72,44.52 94,56 Z" fill="url(#rcB)"/>
+      <path d="M50,56 L94,56 Q77.72,67.48 81.11,87.11 Z" fill="url(#rcA)"/>
+      <path d="M50,56 L81.11,87.11 Q61.48,83.72 50,100 Z" fill="url(#rcB)"/>
+      <path d="M50,56 L50,100 Q38.52,83.72 18.89,87.11 Z" fill="url(#rcA)"/>
+      <path d="M50,56 L18.89,87.11 Q22.28,67.48 6,56 Z" fill="url(#rcB)"/>
+      <path d="M50,56 L6,56 Q22.28,44.52 18.89,24.89 Z" fill="url(#rcA)"/>
+      <path d="M50,56 L18.89,24.89 Q38.52,28.28 50,12 Z" fill="url(#rcB)"/>
+    </g>
+    <path d="M50,12 L50,2" stroke="#3c3c3c" stroke-width="2.6" stroke-linecap="round"/>
   </svg>`;
 
 const esc = (s: unknown): string =>
@@ -137,7 +155,7 @@ export function diamondInvoiceHtml(d: Invoice, variant: 'full' | 'plain' = 'full
     .band-ad { font-size: 9pt; }
 
     .dist-logo { width: 22mm; flex: 0 0 auto; text-align: center; }
-    .dist-mark { display: block; width: 14mm; height: 14mm; margin: 0 auto; }
+    .dist-mark { display: block; width: 14mm; height: auto; margin: 0 auto; }
     .dist-word { font-size: 8pt; font-weight: 700; margin-top: .8mm; }
     .dist-tag { font-size: 3.8pt; letter-spacing: .12em; }
 
