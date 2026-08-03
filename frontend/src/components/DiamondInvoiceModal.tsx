@@ -32,10 +32,25 @@ export function DiamondInvoiceModal({ inv, onClose }: { inv: Invoice; onClose: (
     [data],
   );
 
-  // Grow the frame to its content so the whole slip is visible without scrolling.
+  // Size the frame to the slip itself. Measuring the body rather than the
+  // document keeps the preview the height of the printed content — the paper
+  // below it is the printer's business, not something to show as blank space.
   const fit = () => {
+    const body = frame.current?.contentDocument?.body;
+    if (body) setHeight(Math.ceil(body.getBoundingClientRect().height));
+  };
+
+  // The logos are data URIs, but re-measure once they have decoded so the frame
+  // never settles on a height taken before the letterhead had laid out.
+  const onFrameLoad = () => {
+    fit();
     const doc = frame.current?.contentDocument;
-    if (doc) setHeight(doc.documentElement.scrollHeight + 8);
+    if (!doc) return;
+    Promise.all(
+      Array.from(doc.images)
+        .filter((img) => !img.complete)
+        .map((img) => new Promise((res) => { img.onload = img.onerror = res; })),
+    ).then(fit);
   };
 
   // Printing the frame itself keeps the slip's own @page size, so the job goes
@@ -52,8 +67,8 @@ export function DiamondInvoiceModal({ inv, onClose }: { inv: Invoice; onClose: (
       title={`Invoice ${data.no}`}
       onClose={onClose}
       footer={<>
-        <Button variant="ghost" icon={<Printer size={15} />} onClick={print}>Print</Button>
-        <Button variant="primary" onClick={onClose}>Close</Button>
+        <Button variant="ghost" onClick={onClose}>Close</Button>
+        <Button variant="primary" icon={<Printer size={15} />} onClick={print}>Print</Button>
       </>}
     >
       <div className="flex justify-center">
@@ -61,13 +76,15 @@ export function DiamondInvoiceModal({ inv, onClose }: { inv: Invoice; onClose: (
           ref={frame}
           title={`Invoice ${data.no}`}
           srcDoc={html}
-          onLoad={fit}
+          onLoad={onFrameLoad}
+          scrolling="no"
           style={{
             width: ROLL_PX,
             height,
             border: '1px solid var(--border)',
             borderRadius: 8,
             background: '#fff',
+            display: 'block',
           }}
         />
       </div>
