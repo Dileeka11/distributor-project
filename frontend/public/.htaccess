@@ -6,6 +6,10 @@
   RewriteRule ^index\.html$ - [L]
   RewriteCond %{REQUEST_FILENAME} !-f
   RewriteCond %{REQUEST_FILENAME} !-d
+  # ...except build assets. A page left over from an older build asks for
+  # bundles that no longer exist; answering those with index.html hands it HTML
+  # where it expected a module. Let them 404 so the failure is honest.
+  RewriteCond %{REQUEST_URI} !^/assets/
   RewriteRule . /index.html [L]
 </IfModule>
 
