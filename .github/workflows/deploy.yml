@@ -1,10 +1,12 @@
 name: Deploy to server
 
-# main branch එකට push කරන හැම වෙලාවකම මේක auto run වෙනවා
+# Auto-deploy එක off කරලා. දැන් live එකට යන්නේ අතින් run කළොත් විතරයි:
+# GitHub → Actions → "Deploy to server" → Run workflow.
+# (ආයෙත් auto ඕන නම් පහත push block එකේ comment අයින් කරන්න.)
 on:
-  push:
-    branches: [ main ]
-  workflow_dispatch:   # GitHub UI එකෙන් අතින් run කරන්නත් පුළුවන්
+  # push:
+  #   branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   deploy:
