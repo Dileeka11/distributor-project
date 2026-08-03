@@ -18,8 +18,14 @@ export const useAuth = create<AuthState>((set) => ({
     // Opening the app after the browser was closed always starts at sign-in,
     // even where the browser restored the session cookie for us.
     if (isNewBrowserVisit()) {
-      try { await http.post('/api/auth/logout'); } catch { /* no session to end */ }
       set({ user: null, ready: true });
+      // End the restored session too — but only when there is one. Posting
+      // blind on a first visit costs a CSRF handshake that races the other
+      // boot requests for the session, and comes back 419.
+      try {
+        await http.get('/api/auth/me');
+        await http.post('/api/auth/logout');
+      } catch { /* nothing signed in, or it is already gone */ }
       return;
     }
     try {
