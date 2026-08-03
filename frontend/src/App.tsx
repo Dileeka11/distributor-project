@@ -4,6 +4,7 @@ import { useAuth } from '@/store/auth';
 import { useSettings } from '@/store/settings';
 import { canAccess, firstAllowed } from '@/lib/pages';
 import { startPresenceHeartbeat } from '@/lib/sessionGuard';
+import { reloadIfBuildChanged } from '@/lib/buildVersion';
 import { AppShell } from '@/components/AppShell';
 import LoginPage from '@/pages/LoginPage';
 
@@ -39,6 +40,8 @@ export default function App() {
   const { load } = useSettings();
 
   useEffect(() => {
+    // Before anything else: make sure this is the build the server is serving.
+    void reloadIfBuildChanged();
     void load();
     void bootstrap();
   }, [bootstrap, load]);
