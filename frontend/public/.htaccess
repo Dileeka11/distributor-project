@@ -9,7 +9,8 @@
   RewriteRule . /index.html [L]
 </IfModule>
 
-# Cache static assets
+# Cache static assets. Their filenames carry a content hash, so a new build
+# means a new name — they can be held forever and never go stale.
 <IfModule mod_expires.c>
   ExpiresActive On
   ExpiresByType text/css "access plus 1 year"
@@ -19,6 +20,20 @@
   ExpiresByType image/jpeg "access plus 1 year"
   ExpiresByType image/webp "access plus 1 year"
   ExpiresByType font/woff2 "access plus 1 year"
+
+  # index.html is the one file whose name never changes, and it is what points
+  # at the current hashed bundles. Cached even briefly, the browser keeps
+  # loading the previous build after a deploy — so it must always be re-fetched.
+  ExpiresByType text/html "access plus 0 seconds"
+</IfModule>
+
+<IfModule mod_headers.c>
+  <FilesMatch "\.html$">
+    Header set Cache-Control "no-cache, must-revalidate, max-age=0"
+  </FilesMatch>
+  <FilesMatch "\.(js|css|woff2|svg|png|jpe?g|webp)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
 </IfModule>
 
 # Gzip
