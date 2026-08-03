@@ -27,7 +27,7 @@ const MANUFACTURER = {
 const DISTRIBUTOR = {
   heading: 'Distribute by',
   name: 'RAINCOUTURE',
-  address: ['164/2, Uduwan, Homagama.', 'Tel: 077 546 1134'],
+  address: ['164/2, Uduwana, Homagama.', 'Tel: 077 546 1134'],
   wordmark: 'RainCouture',
   tagline: 'StepOutinStyle',
 };
