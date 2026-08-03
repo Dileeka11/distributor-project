@@ -58,6 +58,7 @@ export interface Customer extends Party {
   type: string;
   cash_discount: string | number;
   cheque_discount: string | number;
+  credit_discount: string | number;
   terms_days: number;
   credit_limit: string | number;
   description: string | null;
@@ -102,6 +103,7 @@ export interface Invoice {
   subtotal: string | number;
   cash_discount?: string | number;
   cheque_discount?: string | number;
+  credit_discount?: string | number;
   discount_amount?: string | number;
   tax_rate: string | number;
   tax_amount: string | number;

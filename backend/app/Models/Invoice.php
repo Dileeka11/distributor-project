@@ -13,7 +13,7 @@ class Invoice extends Model
 
     protected $fillable = [
         'no', 'date', 'type', 'customer_id',
-        'subtotal', 'cash_discount', 'cheque_discount', 'discount_amount',
+        'subtotal', 'cash_discount', 'cheque_discount', 'credit_discount', 'discount_amount',
         'tax_rate', 'tax_amount', 'total', 'paid', 'advance', 'status', 'cancelled_at', 'created_by',
     ];
 
@@ -26,6 +26,7 @@ class Invoice extends Model
         'subtotal' => 'decimal:2',
         'cash_discount' => 'decimal:2',
         'cheque_discount' => 'decimal:2',
+        'credit_discount' => 'decimal:2',
         'discount_amount' => 'decimal:2',
         'tax_rate' => 'decimal:2',
         'tax_amount' => 'decimal:2',

@@ -15,7 +15,7 @@ import type { Customer, CustomerType } from '@/types';
 interface CusForm {
   code: string; name: string; contact: string; phone: string; email: string;
   address: string; city: string; type: string;
-  cash_discount: string; cheque_discount: string; terms_days: string;
+  cash_discount: string; cheque_discount: string; credit_discount: string; terms_days: string;
   credit_limit: string; description: string;
 }
 
@@ -153,11 +153,13 @@ function CustomerModal({
         code: rec.code, name: rec.name, contact: rec.contact ?? '', phone: rec.phone ?? '',
         email: rec.email ?? '', address: rec.address ?? '', city: rec.city ?? '', type: rec.type ?? '',
         cash_discount: String(rec.cash_discount ?? ''), cheque_discount: String(rec.cheque_discount ?? ''),
+        credit_discount: String(rec.credit_discount ?? ''),
         terms_days: String(rec.terms_days ?? ''), credit_limit: String(rec.credit_limit), description: rec.description ?? '',
       }
     : {
         code: nextCode, name: '', contact: '', phone: '', email: '', address: '', city: '',
-        type: types[0]?.name ?? '', cash_discount: '', cheque_discount: '', terms_days: '', credit_limit: '', description: '',
+        type: types[0]?.name ?? '', cash_discount: '', cheque_discount: '', credit_discount: '',
+        terms_days: '', credit_limit: '', description: '',
       });
   const [busy, setBusy] = useState(false);
   const [mgrOpen, setMgrOpen] = useState(false);
@@ -179,6 +181,7 @@ function CustomerModal({
         email: f.email.trim() || null, address: f.address.trim() || null,
         city: f.city.trim() || null, type: f.type || null,
         cash_discount: Number(f.cash_discount) || 0, cheque_discount: Number(f.cheque_discount) || 0,
+        credit_discount: Number(f.credit_discount) || 0,
         terms_days: Number(f.terms_days) || 0, credit_limit: Number(f.credit_limit) || 0,
         description: f.description.trim() || null,
       };
@@ -218,6 +221,7 @@ function CustomerModal({
         </Field>
         <Field label="Cash discount (%)"><MoneyInput value={f.cash_discount} onChange={(v) => setF({ ...f, cash_discount: v })} placeholder="0" /></Field>
         <Field label="Cheque discount (%)"><MoneyInput value={f.cheque_discount} onChange={(v) => setF({ ...f, cheque_discount: v })} placeholder="0" /></Field>
+        <Field label="Credit discount (%)"><MoneyInput value={f.credit_discount} onChange={(v) => setF({ ...f, credit_discount: v })} placeholder="0" /></Field>
         <Field label="Address" full><Textarea value={f.address} onChange={(e) => setF({ ...f, address: e.target.value })} /></Field>
         <Field label="Credit balance (LKR)" full hint="Counts as current outstanding — adds into the customer's Outstanding.">
           <MoneyInput value={f.credit_limit} onChange={(v) => setF({ ...f, credit_limit: v })} />

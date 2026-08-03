@@ -189,10 +189,16 @@ class InvoiceController extends Controller
             ];
         }
 
-        // Cash / cheque discounts applied independently. Rates come from the client request.
+        // Cash / cheque / credit discounts applied independently. Rates come from the client request.
         $cashRate = isset($data['cash_discount']) ? (float) $data['cash_discount'] : 0.0;
         $chequeRate = isset($data['cheque_discount']) ? (float) $data['cheque_discount'] : 0.0;
-        $discountAmount = round(round($subtotal * $cashRate / 100, 2) + round($subtotal * $chequeRate / 100, 2), 2);
+        $creditRate = isset($data['credit_discount']) ? (float) $data['credit_discount'] : 0.0;
+        $discountAmount = round(
+            round($subtotal * $cashRate / 100, 2)
+            + round($subtotal * $chequeRate / 100, 2)
+            + round($subtotal * $creditRate / 100, 2),
+            2
+        );
         $taxable = round($subtotal - $discountAmount, 2);
         $taxAmount = round($taxable * $taxRate / 100, 2);
         $total = round($taxable + $taxAmount, 2);
@@ -208,6 +214,7 @@ class InvoiceController extends Controller
             'subtotal' => $subtotal,
             'cash_discount' => $cashRate,
             'cheque_discount' => $chequeRate,
+            'credit_discount' => $creditRate,
             'discount_amount' => $discountAmount,
             'tax_rate' => $taxRate,
             'tax_amount' => $taxAmount,

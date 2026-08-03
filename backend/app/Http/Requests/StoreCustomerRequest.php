@@ -27,6 +27,7 @@ class StoreCustomerRequest extends FormRequest
             'type' => ['nullable', 'string', 'max:40'],
             'cash_discount' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'cheque_discount' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'credit_discount' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'terms_days' => ['nullable', 'integer', 'min:0', 'max:3650'],
             'credit_limit' => ['nullable', 'numeric', 'min:0'],
             'description' => ['nullable', 'string', 'max:2000'],

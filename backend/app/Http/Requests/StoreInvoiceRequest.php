@@ -18,6 +18,7 @@ class StoreInvoiceRequest extends FormRequest
             'customer_id' => ['required', 'exists:customers,id'],
             'cash_discount' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'cheque_discount' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'credit_discount' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'tax_rate' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'paid' => ['nullable', 'numeric', 'min:0'],
             'lines' => ['required', 'array', 'min:1'],

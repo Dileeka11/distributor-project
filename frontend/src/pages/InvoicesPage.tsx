@@ -133,6 +133,7 @@ function printInvoiceDoc(d: Invoice, settings: AppSettings): void {
         <div class="row"><span>Subtotal</span><span>Rs ${fmt(Number(d.subtotal))}</span></div>
         ${Number(d.cash_discount) > 0 ? `<div class="row"><span>Cash discount</span><span>Rs -${fmt(Number(d.subtotal) * Number(d.cash_discount) / 100)}</span></div>` : ''}
         ${Number(d.cheque_discount) > 0 ? `<div class="row"><span>Cheque discount</span><span>Rs -${fmt(Number(d.subtotal) * Number(d.cheque_discount) / 100)}</span></div>` : ''}
+        ${Number(d.credit_discount) > 0 ? `<div class="row"><span>Credit discount</span><span>Rs -${fmt(Number(d.subtotal) * Number(d.credit_discount) / 100)}</span></div>` : ''}
         ${Number(d.tax_rate) > 0 ? `<div class="row"><span>Tax / VAT (${Number(d.tax_rate)}%)</span><span>Rs ${fmt(Number(d.tax_amount))}</span></div>` : ''}
         <div class="row grand"><span>Total</span><span>Rs ${fmt(Number(d.total))}</span></div>
         <div class="row"><span>Paid</span><span>Rs ${fmt(Number(d.paid))}</span></div>
@@ -312,8 +313,10 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
   const [customerId, setCustomerId] = useState<number | ''>('');
   const [discCash, setDiscCash] = useState(false);
   const [discCheque, setDiscCheque] = useState(false);
+  const [discCredit, setDiscCredit] = useState(false);
   const [cashPctVal, setCashPctVal] = useState('0');
   const [chequePctVal, setChequePctVal] = useState('0');
+  const [creditPctVal, setCreditPctVal] = useState('0');
   const [lines, setLines] = useState<DraftLine[]>([blankLine()]);
   const [paid, setPaid] = useState('');
   const [cheques, setCheques] = useState<ChequeRow[]>([]);
@@ -330,6 +333,8 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
       setCashPctVal(String(Number(d.cash_discount ?? 0)));
       setDiscCheque(Number(d.cheque_discount) > 0);
       setChequePctVal(String(Number(d.cheque_discount ?? 0)));
+      setDiscCredit(Number(d.credit_discount) > 0);
+      setCreditPctVal(String(Number(d.credit_discount ?? 0)));
       setTaxOn(Number(d.tax_rate) > 0);
       setLines((d.lines ?? []).map((l) => ({ item_id: Number(l.item_id), batch_id: l.batch_id ? Number(l.batch_id) : '', qty: String(Number(l.qty)), price: String(Number(l.price)) })));
       (d.lines ?? []).forEach((l) => loadBatches(Number(l.item_id)));
@@ -367,6 +372,7 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
     if (cust && !isEdit) {
       setCashPctVal(String(Number(cust.cash_discount ?? 0)));
       setChequePctVal(String(Number(cust.cheque_discount ?? 0)));
+      setCreditPctVal(String(Number(cust.credit_discount ?? 0)));
     }
   }, [customerId, cust, isEdit]);
 
@@ -375,14 +381,15 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
     const subtotal = lines.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.price) || 0), 0);
     const cashAmt = (subtotal * (discCash ? Number(cashPctVal) || 0 : 0)) / 100;
     const chequeAmt = (subtotal * (discCheque ? Number(chequePctVal) || 0 : 0)) / 100;
-    const discountAmt = cashAmt + chequeAmt;
+    const creditAmt = (subtotal * (discCredit ? Number(creditPctVal) || 0 : 0)) / 100;
+    const discountAmt = cashAmt + chequeAmt + creditAmt;
     const taxable = subtotal - discountAmt;
     const taxAmt = (taxable * taxRate) / 100;
     const total = taxable + taxAmt;
     const paidNum = type === 'cash' ? total : Math.min(Number(paid) || 0, total);
     const balance = total - paidNum;
-    return { subtotal, cashAmt, chequeAmt, discountAmt, taxable, taxAmt, total, paidNum, balance };
-  }, [lines, taxRate, type, paid, discCash, discCheque, cashPctVal, chequePctVal]);
+    return { subtotal, cashAmt, chequeAmt, creditAmt, discountAmt, taxable, taxAmt, total, paidNum, balance };
+  }, [lines, taxRate, type, paid, discCash, discCheque, discCredit, cashPctVal, chequePctVal, creditPctVal]);
 
   const setLine = (i: number, patch: Partial<DraftLine>) =>
     setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
@@ -437,6 +444,7 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
         type, customer_id: customerId, tax_rate: taxRate,
         cash_discount: discCash ? Number(cashPctVal) || 0 : 0,
         cheque_discount: discCheque ? Number(chequePctVal) || 0 : 0,
+        credit_discount: discCredit ? Number(creditPctVal) || 0 : 0,
         paid: type === 'cash' ? totals.total : Number(paid) || 0,
         lines: validLines.map((l) => ({ item_id: l.item_id, batch_id: l.batch_id || null, qty: Number(l.qty), price: Number(l.price) })),
         cheques: type === 'credit'
@@ -592,7 +600,7 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
 
       <div className="grid grid-cols-2 gap-5">
         <div>
-          <Field label="Discount" hint="Apply cash and / or cheque discount.">
+          <Field label="Discount" hint="Apply cash, cheque and / or credit discount.">
             <div className="flex flex-col gap-2.5 mt-2 p-3 rounded-[10px] border border-border bg-surface">
               {/* Cash Discount Option */}
               <div className="flex items-center justify-between gap-4">
@@ -653,6 +661,36 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
                   </div>
                 )}
               </div>
+
+              {/* Credit Discount Option */}
+              <div className="flex items-center justify-between gap-4">
+                <button
+                  type="button"
+                  onClick={() => setDiscCredit(!discCredit)}
+                  disabled={!cust}
+                  className="flex items-center gap-2.5 text-left disabled:opacity-45"
+                >
+                  <span
+                    className="grid place-items-center w-[18px] h-[18px] rounded-[5px] border flex-shrink-0 transition"
+                    style={{ background: discCredit ? 'var(--accent)' : 'var(--surface)', borderColor: discCredit ? 'var(--accent)' : 'var(--border-strong)' }}
+                  >
+                    {discCredit && <Check size={13} color="white" strokeWidth={3} />}
+                  </span>
+                  <span className="text-[13.5px] font-medium">Credit discount</span>
+                </button>
+                {discCredit && (
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <Input
+                      type="text"
+                      className="mono text-right py-0.5 px-2"
+                      style={{ width: 70, height: 28 }}
+                      value={creditPctVal}
+                      onChange={(e) => setCreditPctVal(e.target.value.replace(/[^\d.]/g, ''))}
+                    />
+                    <span className="text-[13px] font-semibold text-muted">%</span>
+                  </div>
+                )}
+              </div>
             </div>
           </Field>
 
@@ -699,6 +737,7 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
           <TotalRow k="Subtotal" v={fmt(totals.subtotal)} />
           {totals.cashAmt > 0 && <TotalRow k="Cash discount" v={`-${fmt(totals.cashAmt)}`} />}
           {totals.chequeAmt > 0 && <TotalRow k="Cheque discount" v={`-${fmt(totals.chequeAmt)}`} />}
+          {totals.creditAmt > 0 && <TotalRow k="Credit discount" v={`-${fmt(totals.creditAmt)}`} />}
           {/* Tax row only exists when tax is actually applied. */}
           {taxRate > 0 && <TotalRow k={`Tax / VAT (${taxRate}%)`} v={fmt(totals.taxAmt)} />}
           <div className="h-px my-2.5" style={{ background: 'var(--border)' }} />
@@ -788,6 +827,7 @@ function ViewInvoice({ inv, onClose, settings }: { inv: Invoice; onClose: () => 
           <TotalRow k="Subtotal" v={fmt(data.subtotal as number)} />
           {Number(data.cash_discount) > 0 && <TotalRow k="Cash discount" v={`-${fmt(Number(data.subtotal) * Number(data.cash_discount) / 100)}`} />}
           {Number(data.cheque_discount) > 0 && <TotalRow k="Cheque discount" v={`-${fmt(Number(data.subtotal) * Number(data.cheque_discount) / 100)}`} />}
+          {Number(data.credit_discount) > 0 && <TotalRow k="Credit discount" v={`-${fmt(Number(data.subtotal) * Number(data.credit_discount) / 100)}`} />}
           {Number(data.tax_rate) > 0 && <TotalRow k={`Tax (${data.tax_rate}%)`} v={fmt(data.tax_amount as number)} />}
           <div className="h-px my-2" style={{ background: 'var(--border)' }} />
           <TotalRow k="Total" v={fmt(data.total as number)} big />
