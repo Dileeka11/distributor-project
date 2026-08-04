@@ -16,6 +16,7 @@ use App\Http\Controllers\LeaveCategoryController;
 use App\Http\Controllers\LeaveController;
 use App\Http\Controllers\PayrollController;
 use App\Http\Controllers\ProductController;
+use App\Http\Controllers\SalesReturnController;
 use App\Http\Controllers\SettingController;
 use App\Http\Controllers\StockController;
 use App\Http\Controllers\StockAdjustmentController;
@@ -73,6 +74,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/invoices/{invoice}/cancel', [InvoiceController::class, 'cancel']);
     Route::delete('/invoices/{invoice}', [InvoiceController::class, 'destroy']);
 
+    Route::get('/sales-returns', [SalesReturnController::class, 'index']);
+    Route::post('/sales-returns', [SalesReturnController::class, 'store']);
+    Route::get('/sales-returns/customer-invoices', [SalesReturnController::class, 'customerInvoices']);
+    Route::get('/sales-returns/credit', [SalesReturnController::class, 'credit']);
+    Route::get('/sales-returns/invoice/{invoice}', [SalesReturnController::class, 'returnableInvoice']);
+    Route::get('/sales-returns/{salesReturn}', [SalesReturnController::class, 'show']);
+    Route::delete('/sales-returns/{salesReturn}', [SalesReturnController::class, 'destroy']);
+
+    Route::get('/grns/return-stock', [GrnController::class, 'returnStock']);
     Route::get('/grns', [GrnController::class, 'index']);
     Route::post('/grns', [GrnController::class, 'store']);
     Route::get('/grns/{grn}', [GrnController::class, 'show']);

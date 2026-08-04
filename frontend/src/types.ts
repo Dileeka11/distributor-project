@@ -107,6 +107,10 @@ export interface Invoice {
   cheque_discount?: string | number;
   credit_discount?: string | number;
   discount_amount?: string | number;
+  /** Return credit taken off this bill, after discount and tax. */
+  return_credit?: string | number;
+  /** Goods handed back off this invoice. */
+  returns?: SalesReturn[];
   tax_rate: string | number;
   tax_amount: string | number;
   total: string | number;
@@ -174,6 +178,8 @@ export interface Grn {
   subtotal: string | number;
   tax_rate: string | number;
   tax_amount: string | number;
+  /** Cost of customer-returned goods handed back to the supplier on this GRN. */
+  return_deduction?: string | number;
   total: string | number;
   paid: string | number;
   advance?: string | number; // up-front amount paid now (stable; excludes later payments)
@@ -344,4 +350,72 @@ export interface DashboardPayload {
   sales_series: { date: string; label: string; cash: number; credit: number; }[];
   sales_month: string;
   inventory_by_category: { label: string; value: number; }[];
+}
+
+export interface SalesReturnLine {
+  id?: ID;
+  invoice_line_id: ID | null;
+  item_id: ID;
+  batch_id?: ID | null;
+  name: string;
+  qty: string | number;
+  price: string | number;
+  discount_rate: string | number;
+  total: string | number;
+  item?: { id: ID; code: string; name: string };
+}
+
+export interface SalesReturn {
+  id: ID;
+  no: string;
+  date: string;
+  customer_id: ID;
+  invoice_id: ID;
+  total: string | number;
+  note: string | null;
+  customer?: Customer;
+  invoice?: Pick<Invoice, 'id' | 'no' | 'date'>;
+  lines?: SalesReturnLine[];
+  /** Credit already spent on later invoices. */
+  used?: string | number;
+}
+
+/** One invoice line as the returns screen sees it. */
+export interface ReturnableLine {
+  invoice_line_id: ID;
+  item_id: ID;
+  batch_id: ID | null;
+  code: string | null;
+  name: string;
+  qty: number;
+  price: number;
+  discount_rate: number;
+  /** What one unit is worth back, the invoice's discount included. */
+  unit_net: number;
+  line_total: number;
+  returned_qty: number;
+  returnable_qty: number;
+}
+
+export interface ReturnableInvoice {
+  invoice: Pick<Invoice, 'id' | 'no' | 'date' | 'type' | 'subtotal' | 'discount_amount' | 'total'>;
+  customer: Customer;
+  discount_rate: number;
+  lines: ReturnableLine[];
+}
+
+/** One returned item still with us, offered back to a supplier on a GRN. */
+export interface ReturnStockRow {
+  sales_return_line_id: ID;
+  item_id: ID;
+  code: string | null;
+  name: string;
+  return_no: string | null;
+  return_date: string | null;
+  customer: string | null;
+  returned_qty: number;
+  sent_qty: number;
+  qty_available: number;
+  /** What we paid for it — the cost lot it was bought on. */
+  unit_cost: number;
 }

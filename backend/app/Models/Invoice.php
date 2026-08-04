@@ -14,7 +14,8 @@ class Invoice extends Model
     protected $fillable = [
         'no', 'date', 'type', 'customer_id',
         'subtotal', 'cash_discount', 'cheque_discount', 'credit_discount', 'discount_amount',
-        'tax_rate', 'tax_amount', 'total', 'paid', 'advance', 'status', 'cancelled_at', 'created_by',
+        'tax_rate', 'tax_amount', 'return_credit', 'total', 'paid', 'advance',
+        'status', 'cancelled_at', 'created_by',
     ];
 
     protected $casts = [
@@ -30,6 +31,7 @@ class Invoice extends Model
         'discount_amount' => 'decimal:2',
         'tax_rate' => 'decimal:2',
         'tax_amount' => 'decimal:2',
+        'return_credit' => 'decimal:2',
         'total' => 'decimal:2',
         'paid' => 'decimal:2',
         'advance' => 'decimal:2',
@@ -48,6 +50,12 @@ class Invoice extends Model
     public function cheques(): HasMany
     {
         return $this->hasMany(InvoiceCheque::class);
+    }
+
+    /** Goods handed back off this invoice. */
+    public function returns(): HasMany
+    {
+        return $this->hasMany(SalesReturn::class);
     }
 
     public function getBalanceAttribute(): float

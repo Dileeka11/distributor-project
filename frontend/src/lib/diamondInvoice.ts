@@ -97,6 +97,45 @@ export function diamondInvoiceHtml(d: Invoice, variant: 'full' | 'plain' = 'full
   const blankRows = Array.from({ length: blanks }, () =>
     '<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td></tr>').join('');
 
+  // Credit from goods this customer returned earlier, settled against this bill.
+  // It prints under the discount because that is where it is taken off — the
+  // money was already discounted on the invoice the goods went out on, so the
+  // discount above it does not apply to it. Net Amount is already net of it.
+  const returnCredit = Number(d.return_credit ?? 0);
+  const returnCreditRow = returnCredit <= 0 ? '' :
+    `<div class="tot"><span class="tot-l">Return Credit</span><span class="tot-v">${fmt(returnCredit)}</span></div>`;
+
+  // Goods handed back off this bill, printed under the totals. The block only
+  // exists when something actually came back — a slip with no return against it
+  // should look exactly as it did before.
+  const returnLines = (d.returns ?? []).flatMap((r) => r.lines ?? []);
+  const returnedTotal = (d.returns ?? []).reduce((s, r) => s + Number(r.total), 0);
+  const returnsBlock = returnLines.length === 0 ? '' : `
+    <div class="rule"></div>
+    <div class="ret-h">Sales Return</div>
+    <table>
+      <thead>
+        <tr>
+          <th class="l" style="width:22%">Item<br>Code</th>
+          <th class="l" style="width:44%">Description</th>
+          <th class="num" style="width:12%">Qty</th>
+          <th class="num" style="width:22%">Value</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${returnLines.map((l) => `
+          <tr>
+            <td class="code">${esc(l.item?.code ?? '')}</td>
+            <td class="desc">${esc(l.name)}</td>
+            <td class="num">${fmt0(Number(l.qty))}</td>
+            <td class="num">${fmt(Number(l.total))}</td>
+          </tr>`).join('')}
+      </tbody>
+    </table>
+    <div class="totals">
+      <div class="tot net"><span class="tot-l">Returned Value</span><span class="tot-v">${fmt(returnedTotal)}</span></div>
+    </div>`;
+
   const makerBand = `
     <div class="rule"></div>
     <div class="band">
@@ -179,6 +218,8 @@ export function diamondInvoiceHtml(d: Invoice, variant: 'full' | 'plain' = 'full
     /* A notch smaller so a typical item code holds one line in a 13mm column. */
     tbody td.code { font-size: 7.5pt; }
 
+    .ret-h { font-size: 8.5pt; font-weight: 700; margin-bottom: .5mm; }
+
     .totals { margin-top: 3.4mm; }
     .tot { display: flex; align-items: flex-end; justify-content: flex-end; gap: 2.6mm; font-size: 8.5pt; min-height: 6.3mm; }
     .tot-l { text-align: right; }
@@ -219,8 +260,11 @@ export function diamondInvoiceHtml(d: Invoice, variant: 'full' | 'plain' = 'full
   <div class="totals">
     <div class="tot"><span class="tot-l">Total</span><span class="tot-v">${fmt(Number(d.subtotal))}</span></div>
     <div class="tot"><span class="tot-l">Discount</span><span class="tot-v">${fmt(Number(d.discount_amount ?? 0))}</span></div>
+    ${returnCreditRow}
     <div class="tot net"><span class="tot-l">Net Amount</span><span class="tot-v">${fmt(Number(d.total))}</span></div>
   </div>
+
+  ${returnsBlock}
 
   <div class="sign">
     <div class="sign-line"></div>

@@ -11,10 +11,10 @@ import { SearchBar, Empty, Segmented, Stat, Switch, Pagination } from '@/compone
 import { useAuth } from '@/store/auth';
 import { canUse } from '@/lib/pages';
 import { Modal } from '@/components/ui/Modal';
-import { Field, MoneyInput, Input } from '@/components/ui/Field';
+import { Field, MoneyInput, Input, Select } from '@/components/ui/Field';
 import { SearchSelect } from '@/components/ui/SearchSelect';
 import { TotalRow } from './InvoicesPage';
-import type { AppSettings, Grn, Item, Supplier } from '@/types';
+import type { AppSettings, Grn, Item, ReturnStockRow, Supplier } from '@/types';
 
 // Printable Goods Received Note — company letterhead, supplier block, item
 // lines, totals, cheques and signature strip. Browser print → save as PDF.
@@ -155,6 +155,14 @@ const blankLine = (): DraftLine => ({ item_id: '', qty: '1', unit_price: '0', di
 const unitCost = (l: DraftLine) => (Number(l.unit_price) || 0) * (1 - (Number(l.discount) || 0) / 100);
 
 interface ChequeRow { no: string; date: string; amount: string; }
+
+/**
+ * One returned item being handed back on this GRN. The item narrows which cost
+ * lots are offered; `line_id` is the lot actually picked, since the same item
+ * can have come back at more than one cost.
+ */
+interface RetRow { item_id: number | ''; line_id: number | ''; qty: string; }
+const blankRetRow = (): RetRow => ({ item_id: '', line_id: '', qty: '' });
 
 export default function GrnsPage() {
   const { settings } = useSettings();
@@ -349,20 +357,72 @@ function CreateGrn({ editGrn, onClose, onSaved }: { editGrn?: Grn | null; onClos
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [busy, setBusy] = useState(false);
+  // The returnable pool, and the rows of it being sent back on this GRN.
+  const [returnStock, setReturnStock] = useState<ReturnStockRow[]>([]);
+  const [retRows, setRetRows] = useState<RetRow[]>([blankRetRow()]);
 
   useEffect(() => {
     void http.get('/api/suppliers').then((r) => setSuppliers(r.data.data));
     void http.get('/api/items').then((r) => setItems(r.data.data));
   }, []);
 
+  // Customer-returned goods still with us, at what we paid for them. Editing a
+  // GRN keeps that GRN's own claim in the pool so its lines stay selectable.
+  useEffect(() => {
+    void http.get('/api/grns/return-stock', { params: editGrn ? { grn_id: editGrn.id } : {} })
+      .then((r) => setReturnStock(r.data.data))
+      .catch(() => setReturnStock([]));
+  }, [editGrn]);
+
   const totals = useMemo(() => {
     const subtotal = lines.reduce((s, l) => s + (Number(l.qty) || 0) * unitCost(l), 0);
     const taxAmt = (subtotal * taxRate) / 100;
-    const total = subtotal + taxAmt;
+    const billed = subtotal + taxAmt;
+    // Goods going back to the supplier come off the bill at cost.
+    const returnDeduction = retRows.reduce((s, r) => {
+      const pick = returnStock.find((x) => x.sales_return_line_id === r.line_id);
+      return s + (Number(r.qty) || 0) * (pick?.unit_cost ?? 0);
+    }, 0);
+    const total = Math.max(0, billed - returnDeduction);
     const paidNum = type === 'cash' ? total : Math.min(Number(paid) || 0, total);
     const balance = total - paidNum;
-    return { subtotal, taxAmt, total, paidNum, balance };
-  }, [lines, taxRate, type, paid]);
+    return { subtotal, taxAmt, billed, returnDeduction, total, paidNum, balance };
+  }, [lines, taxRate, type, paid, returnStock, retRows]);
+
+  // One entry per returned item in the pool, for the item dropdown.
+  const returnItems = useMemo(() => {
+    const seen = new Map<number, { item_id: number; code: string | null; name: string }>();
+    returnStock.forEach((r) => {
+      if (!seen.has(r.item_id)) seen.set(r.item_id, { item_id: r.item_id, code: r.code, name: r.name });
+    });
+    return [...seen.values()];
+  }, [returnStock]);
+
+  /** The cost lots that item came back on — each is its own return line. */
+  const costsFor = (itemId: number | '') =>
+    itemId === '' ? [] : returnStock.filter((r) => r.item_id === itemId);
+
+  /** What is left on a line once the other rows have taken their share. */
+  const capFor = (lineId: number | '', exceptIdx: number) => {
+    if (lineId === '') return 0;
+    const pool = returnStock.find((r) => r.sales_return_line_id === lineId);
+    if (!pool) return 0;
+    const takenElsewhere = retRows.reduce(
+      (s, r, i) => s + (i !== exceptIdx && r.line_id === lineId ? Number(r.qty) || 0 : 0), 0,
+    );
+    return Math.max(0, pool.qty_available - takenElsewhere);
+  };
+
+  const setRetRow = (i: number, patch: Partial<RetRow>) =>
+    setRetRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  // Changing the item clears the cost lot, which belonged to the old one.
+  const pickReturnItem = (i: number, itemId: number | '') => {
+    const only = itemId === '' ? [] : returnStock.filter((r) => r.item_id === itemId);
+    setRetRow(i, { item_id: itemId, line_id: only.length === 1 ? only[0].sales_return_line_id : '', qty: '' });
+  };
+  const addRetRow = () => setRetRows((rs) => [...rs, blankRetRow()]);
+  const delRetRow = (i: number) =>
+    setRetRows((rs) => (rs.length > 1 ? rs.filter((_, idx) => idx !== i) : [blankRetRow()]));
 
   const sup = suppliers.find((s) => Number(s.id) === supplierId);
 
@@ -376,7 +436,9 @@ function CreateGrn({ editGrn, onClose, onSaved }: { editGrn?: Grn | null; onClos
   const delLine = (i: number) => setLines((ls) => (ls.length > 1 ? ls.filter((_, idx) => idx !== i) : ls));
 
   const validLines = lines.filter((l) => l.item_id !== '' && Number(l.qty) > 0);
-  const canSave = supplierId !== '' && validLines.length > 0 && !busy;
+  const validRetRows = retRows.filter((r) => r.line_id !== '' && Number(r.qty) > 0);
+  const overHandBack = retRows.some((r, i) => (Number(r.qty) || 0) > capFor(r.line_id, i));
+  const canSave = supplierId !== '' && validLines.length > 0 && !overHandBack && !busy;
 
   const save = async () => {
     if (!canSave) return;
@@ -386,6 +448,7 @@ function CreateGrn({ editGrn, onClose, onSaved }: { editGrn?: Grn | null; onClos
         type, supplier_id: supplierId, tax_rate: taxRate,
         paid: type === 'cash' ? totals.total : Number(paid) || 0,
         lines: validLines.map((l) => ({ item_id: l.item_id, qty: Number(l.qty), unit_price: Number(l.unit_price) || 0, discount: Number(l.discount) || 0 })),
+        return_lines: validRetRows.map((r) => ({ sales_return_line_id: r.line_id, qty: Number(r.qty) })),
         cheques: type === 'credit'
           ? cheques
               .filter((c) => c.no.trim() || c.date || Number(c.amount) > 0)
@@ -520,6 +583,92 @@ function CreateGrn({ editGrn, onClose, onSaved }: { editGrn?: Grn | null; onClos
         <Button variant="subtle" size="sm" icon={<Plus size={14} />} onClick={addLine} style={{ margin: 8 }}>Add item</Button>
       </div>
 
+      {returnStock.length > 0 && (
+        <>
+          <div className="text-[13px] font-semibold mb-2" style={{ color: 'var(--text-muted)' }}>
+            Return items to send back
+            <span className="font-medium" style={{ color: 'var(--text-faint)' }}> · goods customers returned, valued at cost</span>
+          </div>
+          <div className="card p-2.5 mb-4">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr>
+                  <th className="text-left text-[11px] uppercase tracking-wider font-bold p-2" style={{ color: 'var(--text-faint)', width: '38%' }}>Returned item</th>
+                  <th className="text-left text-[11px] uppercase font-bold p-2" style={{ color: 'var(--text-faint)', width: '32%' }}>Cost</th>
+                  <th className="text-right text-[11px] uppercase font-bold p-2" style={{ color: 'var(--text-faint)', width: 90 }}>Send back</th>
+                  <th className="text-right text-[11px] uppercase font-bold p-2" style={{ color: 'var(--text-faint)' }}>Cost value</th>
+                  <th style={{ width: 36 }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {retRows.map((row, i) => {
+                  const costs = costsFor(row.item_id);
+                  const pick = returnStock.find((r) => r.sales_return_line_id === row.line_id);
+                  const qty = Number(row.qty) || 0;
+                  const cap = capFor(row.line_id, i);
+                  const over = qty > cap;
+                  return (
+                    <tr key={i} style={{ borderTop: '1px solid var(--border)' }}>
+                      <td className="p-1.5">
+                        <Select
+                          value={row.item_id}
+                          onChange={(e) => pickReturnItem(i, e.target.value === '' ? '' : Number(e.target.value))}
+                          style={{ height: 36 }}
+                        >
+                          <option value="">Select returned item…</option>
+                          {returnItems.map((o) => (
+                            <option key={o.item_id} value={o.item_id}>{o.code ? `${o.code} · ` : ''}{o.name}</option>
+                          ))}
+                        </Select>
+                      </td>
+                      <td className="p-1.5">
+                        <Select
+                          value={row.line_id}
+                          disabled={row.item_id === ''}
+                          onChange={(e) => setRetRow(i, { line_id: e.target.value === '' ? '' : Number(e.target.value) })}
+                          style={{ height: 36 }}
+                        >
+                          <option value="">{row.item_id === '' ? 'Pick an item first' : 'Select cost…'}</option>
+                          {costs.map((c) => (
+                            <option key={c.sales_return_line_id} value={c.sales_return_line_id}>
+                              Rs {fmt(c.unit_cost)} · {fmt0(c.qty_available)} left · {c.return_no}
+                            </option>
+                          ))}
+                        </Select>
+                      </td>
+                      <td className="p-1.5">
+                        <Input
+                          className="mono text-right"
+                          inputMode="numeric"
+                          disabled={row.line_id === ''}
+                          style={{ height: 36, borderColor: over ? 'var(--red)' : undefined }}
+                          value={row.qty}
+                          onChange={(e) => setRetRow(i, { qty: e.target.value.replace(/\D/g, '') })}
+                        />
+                      </td>
+                      <td className="p-1.5 text-right money font-semibold">{fmt(qty * (pick?.unit_cost ?? 0))}</td>
+                      <td className="p-1.5 text-right">
+                        <button className="grid place-items-center w-7 h-7 rounded-md hover:bg-surface-2" onClick={() => delRetRow(i)} type="button"><X size={15} /></button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <Button variant="subtle" size="sm" icon={<Plus size={14} />} onClick={addRetRow} style={{ margin: 8 }}>Add item</Button>
+            {overHandBack && (
+              <div className="text-[12px] px-2 pb-1" style={{ color: 'var(--red)' }}>
+                One of these is more than is still here to send back.
+              </div>
+            )}
+            <div className="text-[11.5px] px-2 pb-1" style={{ color: 'var(--text-faint)' }}>
+              What you send back comes off this GRN's total at cost and leaves the return pool —
+              the next GRN only offers what is still here.
+            </div>
+          </div>
+        </>
+      )}
+
       <div className="grid grid-cols-2 gap-5">
         <div>
           {type === 'credit' && (
@@ -564,6 +713,7 @@ function CreateGrn({ editGrn, onClose, onSaved }: { editGrn?: Grn | null; onClos
           <TotalRow k="Subtotal" v={fmt(totals.subtotal)} />
           {/* Tax row only exists when tax is actually applied. */}
           {taxRate > 0 && <TotalRow k={`Tax / VAT (${taxRate}%)`} v={fmt(totals.taxAmt)} />}
+          {totals.returnDeduction > 0 && <TotalRow k="Return items sent back" v={`-${fmt(totals.returnDeduction)}`} />}
           <div className="h-px my-2.5" style={{ background: 'var(--border)' }} />
           <TotalRow k="Total" v={fmt(totals.total)} big />
           {type === 'credit' && (<>

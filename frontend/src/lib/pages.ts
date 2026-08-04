@@ -13,6 +13,7 @@ export const PAGES: PageDef[] = [
   { key: 'employees', label: 'Employees', to: '/employees', group: 'Masters' },
   { key: 'invoices', label: 'Invoices', to: '/invoices', group: 'Transactions' },
   { key: 'grns', label: 'Purchases (GRN)', to: '/grns', group: 'Transactions' },
+  { key: 'sales_returns', label: 'Sales Returns', to: '/sales-returns', group: 'Transactions' },
   { key: 'outstanding', label: 'Outstanding', to: '/outstanding', group: 'Transactions' },
   { key: 'reports', label: 'Reports', to: '/reports', group: 'Reports' },
   { key: 'stock_txn', label: 'Stock Transaction Report', to: '/stock-transactions', group: 'Reports' },

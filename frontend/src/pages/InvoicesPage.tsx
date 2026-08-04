@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, X, Check, Wallet, Receipt, Clock, ReceiptText, Edit2, Ban, Trash2, Printer } from 'lucide-react';
+import { Plus, X, Check, Wallet, Receipt, Clock, ReceiptText, Edit2, Ban, Trash2, Printer, Undo2 } from 'lucide-react';
 import { http, apiErrorMessage } from '@/lib/http';
 import { fmt, fmt0, compact, prettyDate } from '@/lib/format';
 import { toast, confirmDelete } from '@/lib/toast';
@@ -188,6 +188,11 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
   const [cashPctVal, setCashPctVal] = useState('0');
   const [chequePctVal, setChequePctVal] = useState('0');
   const [creditPctVal, setCreditPctVal] = useState('0');
+  // Sales-return credit: what is still unspent, plus what this invoice already
+  // holds when editing (the server frees that back as part of the edit).
+  const [creditAvail, setCreditAvail] = useState(0);
+  const [editCredit, setEditCredit] = useState(0);
+  const [useCredit, setUseCredit] = useState(false);
   const [lines, setLines] = useState<DraftLine[]>([blankLine()]);
   const [paid, setPaid] = useState('');
   const [cheques, setCheques] = useState<ChequeRow[]>([]);
@@ -206,6 +211,8 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
       setChequePctVal(String(Number(d.cheque_discount ?? 0)));
       setDiscCredit(Number(d.credit_discount) > 0);
       setCreditPctVal(String(Number(d.credit_discount ?? 0)));
+      setEditCredit(Number(d.return_credit ?? 0));
+      setUseCredit(Number(d.return_credit ?? 0) > 0);
       setTaxOn(Number(d.tax_rate) > 0);
       setLines((d.lines ?? []).map((l) => ({ item_id: Number(l.item_id), batch_id: l.batch_id ? Number(l.batch_id) : '', qty: String(Number(l.qty)), price: String(Number(l.price)) })));
       (d.lines ?? []).forEach((l) => loadBatches(Number(l.item_id)));
@@ -247,6 +254,14 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
     }
   }, [customerId, cust, isEdit]);
 
+  // What this customer is owed for goods they returned earlier. Offered here so
+  // it can be settled against the bill being raised.
+  useEffect(() => {
+    if (customerId === '') { setCreditAvail(0); return; }
+    void http.get('/api/sales-returns/credit', { params: { customer_id: customerId } })
+      .then((r) => setCreditAvail(Number(r.data.data.available) || 0))
+      .catch(() => setCreditAvail(0));
+  }, [customerId]);
 
   const totals = useMemo(() => {
     const subtotal = lines.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.price) || 0), 0);
@@ -256,11 +271,15 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
     const discountAmt = cashAmt + chequeAmt + creditAmt;
     const taxable = subtotal - discountAmt;
     const taxAmt = (taxable * taxRate) / 100;
-    const total = taxable + taxAmt;
+    const billed = taxable + taxAmt;
+    // Return credit comes off after the discount — that money was already
+    // discounted on the invoice the goods went out on.
+    const returnCredit = useCredit ? Math.min(creditAvail + editCredit, billed) : 0;
+    const total = billed - returnCredit;
     const paidNum = type === 'cash' ? total : Math.min(Number(paid) || 0, total);
     const balance = total - paidNum;
-    return { subtotal, cashAmt, chequeAmt, creditAmt, discountAmt, taxable, taxAmt, total, paidNum, balance };
-  }, [lines, taxRate, type, paid, discCash, discCheque, discCredit, cashPctVal, chequePctVal, creditPctVal]);
+    return { subtotal, cashAmt, chequeAmt, creditAmt, discountAmt, taxable, taxAmt, billed, returnCredit, total, paidNum, balance };
+  }, [lines, taxRate, type, paid, discCash, discCheque, discCredit, cashPctVal, chequePctVal, creditPctVal, useCredit, creditAvail, editCredit]);
 
   const setLine = (i: number, patch: Partial<DraftLine>) =>
     setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
@@ -316,6 +335,7 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
         cash_discount: discCash ? Number(cashPctVal) || 0 : 0,
         cheque_discount: discCheque ? Number(chequePctVal) || 0 : 0,
         credit_discount: discCredit ? Number(creditPctVal) || 0 : 0,
+        return_credit: totals.returnCredit,
         paid: type === 'cash' ? totals.total : Number(paid) || 0,
         lines: validLines.map((l) => ({ item_id: l.item_id, batch_id: l.batch_id || null, qty: Number(l.qty), price: Number(l.price) })),
         cheques: type === 'credit'
@@ -578,6 +598,31 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
             </div>
           )}
 
+          {creditAvail + editCredit > 0 && (
+            <div className="mt-4 p-3 rounded-[10px] border" style={{ borderColor: useCredit ? 'var(--accent)' : 'var(--border)', background: 'var(--surface)' }}>
+              <button
+                type="button"
+                onClick={() => setUseCredit(!useCredit)}
+                className="flex items-start gap-2.5 text-left w-full"
+              >
+                <span
+                  className="grid place-items-center w-[18px] h-[18px] rounded-[5px] border flex-shrink-0 transition mt-0.5"
+                  style={{ background: useCredit ? 'var(--accent)' : 'var(--surface)', borderColor: useCredit ? 'var(--accent)' : 'var(--border-strong)' }}
+                >
+                  {useCredit && <Check size={13} color="white" strokeWidth={3} />}
+                </span>
+                <span>
+                  <span className="text-[13.5px] font-medium">
+                    Use sales-return credit — Rs {fmt(creditAvail + editCredit)} available
+                  </span>
+                  <span className="block text-[11.5px]" style={{ color: 'var(--text-faint)' }}>
+                    Goods this customer returned earlier. Comes off after the discount.
+                  </span>
+                </span>
+              </button>
+            </div>
+          )}
+
           {type === 'credit' && (
           <div className="mt-4">
             <div className="flex items-center justify-between mb-2">
@@ -611,6 +656,7 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
           {totals.creditAmt > 0 && <TotalRow k="Credit discount" v={`-${fmt(totals.creditAmt)}`} />}
           {/* Tax row only exists when tax is actually applied. */}
           {taxRate > 0 && <TotalRow k={`Tax / VAT (${taxRate}%)`} v={fmt(totals.taxAmt)} />}
+          {totals.returnCredit > 0 && <TotalRow k="Sales return credit" v={`-${fmt(totals.returnCredit)}`} />}
           <div className="h-px my-2.5" style={{ background: 'var(--border)' }} />
           <TotalRow k="Total" v={fmt(totals.total)} big />
           {type === 'credit' && (<>
@@ -703,6 +749,7 @@ function ViewInvoice({ inv, onClose }: { inv: Invoice; onClose: () => void }) {
           {Number(data.cash_discount) > 0 && <TotalRow k="Cash discount" v={`-${fmt(Number(data.subtotal) * Number(data.cash_discount) / 100)}`} />}
           {Number(data.cheque_discount) > 0 && <TotalRow k="Cheque discount" v={`-${fmt(Number(data.subtotal) * Number(data.cheque_discount) / 100)}`} />}
           {Number(data.credit_discount) > 0 && <TotalRow k="Credit discount" v={`-${fmt(Number(data.subtotal) * Number(data.credit_discount) / 100)}`} />}
+          {Number(data.return_credit) > 0 && <TotalRow k="Sales return credit" v={`-${fmt(Number(data.return_credit))}`} />}
           {Number(data.tax_rate) > 0 && <TotalRow k={`Tax (${data.tax_rate}%)`} v={fmt(data.tax_amount as number)} />}
           <div className="h-px my-2" style={{ background: 'var(--border)' }} />
           <TotalRow k="Total" v={fmt(data.total as number)} big />
@@ -711,6 +758,49 @@ function ViewInvoice({ inv, onClose }: { inv: Invoice; onClose: () => void }) {
           <div className="mt-2.5 text-right"><Badge kind={st.kind} dot>{st.label}</Badge></div>
         </div>
       </div>
+
+      <ReturnedOffInvoice inv={data} />
     </Modal>
+  );
+}
+
+/**
+ * What has come back off this invoice. The bill itself is untouched — the
+ * returned value became credit against the customer — so it is shown as its own
+ * block rather than folded into the totals.
+ */
+function ReturnedOffInvoice({ inv }: { inv: Invoice }) {
+  const returns = inv.returns ?? [];
+  if (returns.length === 0) return null;
+
+  const lines = returns.flatMap((r) => (r.lines ?? []).map((l) => ({ ...l, ret: r })));
+  const total = returns.reduce((s, r) => s + Number(r.total), 0);
+
+  return (
+    <div className="mt-6">
+      <div className="flex items-center gap-2 mb-2.5">
+        <Undo2 size={15} style={{ color: 'var(--amber)' }} />
+        <span className="text-[13px] font-semibold">Returned off this invoice</span>
+      </div>
+      <div className="card overflow-hidden">
+        <table className="tbl">
+          <thead><tr><th>Return</th><th>Item</th><th className="num">Qty</th><th className="num">Value</th></tr></thead>
+          <tbody>
+            {lines.map((l, i) => (
+              <tr key={`${l.ret.id}-${l.id ?? i}`}>
+                <td className="mono text-[12px]">{l.ret.no}<div style={{ color: 'var(--text-faint)' }}>{prettyDate(l.ret.date)}</div></td>
+                <td className="font-semibold">{l.name}</td>
+                <td className="num">{fmt0(l.qty)}</td>
+                <td className="num money font-bold">{fmt(l.total)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="flex justify-between items-baseline mt-2.5 text-[13px]">
+        <span style={{ color: 'var(--text-muted)' }}>Credited to the customer</span>
+        <span className="money font-bold text-[15px]">Rs {fmt(total)}</span>
+      </div>
+    </div>
   );
 }

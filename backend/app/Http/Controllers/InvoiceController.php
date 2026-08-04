@@ -8,6 +8,7 @@ use App\Models\Invoice;
 use App\Models\Item;
 use App\Models\ItemBatch;
 use App\Services\NumberService;
+use App\Services\ReturnCreditService;
 use App\Services\SettlementService;
 use App\Services\StockService;
 use Illuminate\Http\JsonResponse;
@@ -25,6 +26,10 @@ class InvoiceController extends Controller
         'lines.item:id,code,name',
         'lines.item.product:id,item_id',
     ];
+
+    public function __construct(private readonly ReturnCreditService $credits)
+    {
+    }
 
     public function index(Request $request): JsonResponse
     {
@@ -48,7 +53,12 @@ class InvoiceController extends Controller
     public function show(Invoice $invoice): JsonResponse
     {
         return response()->json([
-            'data' => $invoice->load(['customer', ...self::PRINT_LINE_RELATIONS, 'cheques']),
+            // `returns` so the bill can show what came back off it.
+            'data' => $invoice->load([
+                'customer', ...self::PRINT_LINE_RELATIONS, 'cheques',
+                'returns:id,no,date,invoice_id,total',
+                'returns.lines', 'returns.lines.item:id,code,name',
+            ]),
         ]);
     }
 
@@ -120,8 +130,10 @@ class InvoiceController extends Controller
             $invoice->refresh();
             $this->reverseInvoiceEffects($invoice); // restores item stock + reverses receivable
             $invoice->cheques()->delete();          // record-only cheques no longer apply
+            $this->credits->release($invoice);      // return credit goes back to the customer
             $invoice->fill([
                 'cancelled_at' => now(),
+                'return_credit' => 0,
                 'paid' => 0,
                 'advance' => 0,
                 'status' => 'unpaid',
@@ -211,13 +223,12 @@ class InvoiceController extends Controller
         );
         $taxable = round($subtotal - $discountAmount, 2);
         $taxAmount = round($taxable * $taxRate / 100, 2);
-        $total = round($taxable + $taxAmount, 2);
+        $billed = round($taxable + $taxAmount, 2);
 
         $type = $data['type'];
-        $paid = $type === 'cash' ? $total : min((float) ($data['paid'] ?? 0), $total);
-        $balance = round($total - $paid, 2);
-        $status = $balance <= 0 ? 'paid' : ($paid > 0 ? 'partial' : 'unpaid');
 
+        // Everything except the return credit, which cannot be booked until the
+        // invoice has an id to book it against.
         $invoice->fill([
             'type' => $type,
             'customer_id' => $data['customer_id'],
@@ -228,6 +239,26 @@ class InvoiceController extends Controller
             'discount_amount' => $discountAmount,
             'tax_rate' => $taxRate,
             'tax_amount' => $taxAmount,
+            'return_credit' => 0,
+            'total' => $billed,
+            'paid' => 0,
+            'advance' => 0,
+            'status' => 'unpaid',
+        ]);
+        $invoice->save();
+
+        // Return credit comes off last. It is money the customer was already
+        // charged — and already discounted — on the invoice the goods went out
+        // on, so this bill's discount must not touch it a second time.
+        $returnCredit = $this->credits->apply($invoice, min((float) ($data['return_credit'] ?? 0), $billed));
+        $total = round($billed - $returnCredit, 2);
+
+        $paid = $type === 'cash' ? $total : min((float) ($data['paid'] ?? 0), $total);
+        $balance = round($total - $paid, 2);
+        $status = $balance <= 0 ? 'paid' : ($paid > 0 ? 'partial' : 'unpaid');
+
+        $invoice->fill([
+            'return_credit' => $returnCredit,
             'total' => $total,
             'paid' => $paid,
             // The up-front amount entered on the form. Stays put while cheques

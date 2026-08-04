@@ -19,6 +19,7 @@ const SuppliersPage = lazy(() => import('@/pages/SuppliersPage'));
 const CustomersPage = lazy(() => import('@/pages/CustomersPage'));
 const InvoicesPage = lazy(() => import('@/pages/InvoicesPage'));
 const GrnsPage = lazy(() => import('@/pages/GrnsPage'));
+const SalesReturnsPage = lazy(() => import('@/pages/SalesReturnsPage'));
 const OutstandingPage = lazy(() => import('@/pages/OutstandingPage'));
 const ReportsPage = lazy(() => import('@/pages/ReportsPage'));
 const LiveStockPage = lazy(() => import('@/pages/LiveStockPage'));
@@ -80,6 +81,7 @@ export default function App() {
         <Route path="employees" element={<Guard perm="employees"><EmployeesPage /></Guard>} />
         <Route path="invoices" element={<Guard perm="invoices"><InvoicesPage /></Guard>} />
         <Route path="grns" element={<Guard perm="grns"><GrnsPage /></Guard>} />
+        <Route path="sales-returns" element={<Guard perm="sales_returns"><SalesReturnsPage /></Guard>} />
         <Route path="outstanding" element={<Guard perm="outstanding"><OutstandingPage /></Guard>} />
         <Route path="reports" element={<Guard perm="reports"><ReportsPage /></Guard>} />
         <Route path="live-stock" element={<Guard perm="live_stock"><LiveStockPage /></Guard>} />

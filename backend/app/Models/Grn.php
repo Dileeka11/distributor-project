@@ -15,7 +15,8 @@ class Grn extends Model
 
     protected $fillable = [
         'no', 'date', 'type', 'supplier_id',
-        'subtotal', 'tax_rate', 'tax_amount', 'total', 'paid', 'advance', 'status', 'cancelled_at', 'created_by',
+        'subtotal', 'tax_rate', 'tax_amount', 'return_deduction', 'total', 'paid',
+        'advance', 'status', 'cancelled_at', 'created_by',
     ];
 
     protected $casts = [
@@ -27,6 +28,7 @@ class Grn extends Model
         'subtotal' => 'decimal:2',
         'tax_rate' => 'decimal:2',
         'tax_amount' => 'decimal:2',
+        'return_deduction' => 'decimal:2',
         'total' => 'decimal:2',
         'paid' => 'decimal:2',
         'advance' => 'decimal:2',
@@ -45,6 +47,12 @@ class Grn extends Model
     public function cheques(): HasMany
     {
         return $this->hasMany(GrnCheque::class);
+    }
+
+    /** Customer-returned goods handed back to the supplier on this GRN. */
+    public function returnLines(): HasMany
+    {
+        return $this->hasMany(GrnReturnLine::class);
     }
 
     public function getBalanceAttribute(): float
