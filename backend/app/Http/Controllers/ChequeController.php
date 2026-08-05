@@ -43,33 +43,70 @@ class ChequeController extends Controller
      * Tick / untick a cheque as "passed". Clearing applies the cheque value as a
      * payment (paid += value, customer balance -= value); unticking reverses it.
      */
-    public function toggle(InvoiceCheque $cheque): JsonResponse
+    public function toggle(InvoiceCheque $cheque, SettlementService $posting): JsonResponse
     {
-        DB::transaction(function () use ($cheque) {
+        DB::transaction(function () use ($cheque, $posting) {
             /** @var Invoice $invoice */
             $invoice = Invoice::query()->whereKey($cheque->invoice_id)->lockForUpdate()->firstOrFail();
             $amount = (float) $cheque->amount;
+            $customerId = (int) $invoice->customer_id;
 
             if ($cheque->cleared_at) {
-                $invoice->paid = round((float) $invoice->paid - $amount, 2);
-                $cheque->cleared_at = null;
-            } else {
-                $invoice->paid = round((float) $invoice->paid + $amount, 2);
-                $cheque->cleared_at = now();
-            }
+                // Take back exactly what was put on the invoice, then undo the
+                // surplus wherever it went. Cheques cleared before the snapshot
+                // existed have no record, so the whole value comes off here.
+                $applied = is_array($cheque->applied) ? $cheque->applied : null;
+                $onInvoice = $applied ? (float) ($applied['invoice'] ?? 0) : $amount;
+                $invoice->paid = round((float) $invoice->paid - $onInvoice, 2);
+                $this->saveInvoiceStatus($invoice);
 
-            $balance = round((float) $invoice->total - (float) $invoice->paid, 2);
-            $invoice->status = $balance <= 0 ? 'paid' : ((float) $invoice->paid > 0 ? 'partial' : 'unpaid');
-            $invoice->save();
-            $cheque->save();
+                if ($applied && ! empty($applied['spill']) && $customerId) {
+                    $customer = Customer::query()->whereKey($customerId)->lockForUpdate()->firstOrFail();
+                    $posting->reverseReceivable($customer, $applied['spill']);
+                }
+                $cheque->applied = null;
+                $cheque->cleared_at = null;
+                $cheque->save();
+            } else {
+                // A cheque may be worth more than the invoice still owes — the
+                // rest of the bill was already collected by a receipt. Only the
+                // due part goes on the invoice; the surplus is real money too,
+                // so it settles the customer's other invoices and opening due
+                // instead of being lost to the overpayment clamp below.
+                $due = round((float) $invoice->total - (float) $invoice->paid, 2);
+                $onInvoice = max(0.0, min($amount, $due));
+                $invoice->paid = round((float) $invoice->paid + $onInvoice, 2);
+                $this->saveInvoiceStatus($invoice);
+
+                $surplus = round($amount - $onInvoice, 2);
+                $spill = null;
+                if ($surplus > 0 && $customerId) {
+                    // Reconcile first so the spill is spread over what the
+                    // customer actually still owes right now.
+                    $this->reconcileCustomerBalance($customerId);
+                    $customer = Customer::query()->whereKey($customerId)->lockForUpdate()->firstOrFail();
+                    $spill = $posting->applyReceivable($customer, $surplus);
+                }
+
+                $cheque->applied = ['invoice' => $onInvoice, 'spill' => $spill];
+                $cheque->cleared_at = now();
+                $cheque->save();
+            }
 
             // Recompute the customer's running outstanding from the invoices instead
             // of nudging it by the cheque value — over/under-applied cheques then
             // can't drift it (an overpaid invoice contributes 0, never negative).
-            $this->reconcileCustomerBalance((int) $invoice->customer_id);
+            $this->reconcileCustomerBalance($customerId);
         });
 
         return response()->json(['data' => $cheque->fresh()]);
+    }
+
+    private function saveInvoiceStatus(Invoice $invoice): void
+    {
+        $balance = round((float) $invoice->total - (float) $invoice->paid, 2);
+        $invoice->status = $balance <= 0 ? 'paid' : ((float) $invoice->paid > 0 ? 'partial' : 'unpaid');
+        $invoice->save();
     }
 
     public function grnIndex(): JsonResponse
@@ -100,31 +137,60 @@ class ChequeController extends Controller
      * Tick / untick a GRN cheque as "passed". Clearing applies it as a payment
      * to the supplier (grn paid += value, supplier payable -= value).
      */
-    public function grnToggle(GrnCheque $grnCheque): JsonResponse
+    public function grnToggle(GrnCheque $grnCheque, SettlementService $posting): JsonResponse
     {
-        DB::transaction(function () use ($grnCheque) {
+        DB::transaction(function () use ($grnCheque, $posting) {
             /** @var Grn $grn */
             $grn = Grn::query()->whereKey($grnCheque->grn_id)->lockForUpdate()->firstOrFail();
             $amount = (float) $grnCheque->amount;
+            $supplierId = (int) $grn->supplier_id;
 
             if ($grnCheque->cleared_at) {
-                $grn->paid = round((float) $grn->paid - $amount, 2);
+                $applied = is_array($grnCheque->applied) ? $grnCheque->applied : null;
+                $onGrn = $applied ? (float) ($applied['grn'] ?? 0) : $amount;
+                $grn->paid = round((float) $grn->paid - $onGrn, 2);
+                $this->saveGrnStatus($grn);
+
+                if ($applied && ! empty($applied['spill']) && $supplierId) {
+                    $supplier = Supplier::query()->whereKey($supplierId)->lockForUpdate()->firstOrFail();
+                    $posting->reversePayable($supplier, $applied['spill']);
+                }
+                $grnCheque->applied = null;
                 $grnCheque->cleared_at = null;
+                $grnCheque->save();
             } else {
-                $grn->paid = round((float) $grn->paid + $amount, 2);
+                // Same as the invoice side: only what this GRN still owes goes
+                // on it, the surplus pays down the supplier's other GRNs.
+                $due = round((float) $grn->total - (float) $grn->paid, 2);
+                $onGrn = max(0.0, min($amount, $due));
+                $grn->paid = round((float) $grn->paid + $onGrn, 2);
+                $this->saveGrnStatus($grn);
+
+                $surplus = round($amount - $onGrn, 2);
+                $spill = null;
+                if ($surplus > 0 && $supplierId) {
+                    $this->reconcileSupplierPayable($supplierId);
+                    $supplier = Supplier::query()->whereKey($supplierId)->lockForUpdate()->firstOrFail();
+                    $spill = $posting->applyPayable($supplier, $surplus);
+                }
+
+                $grnCheque->applied = ['grn' => $onGrn, 'spill' => $spill];
                 $grnCheque->cleared_at = now();
+                $grnCheque->save();
             }
 
-            $balance = round((float) $grn->total - (float) $grn->paid, 2);
-            $grn->status = $balance <= 0 ? 'paid' : ((float) $grn->paid > 0 ? 'partial' : 'unpaid');
-            $grn->save();
-            $grnCheque->save();
-
             // Recompute the supplier's payable from the GRNs (same anti-drift rule).
-            $this->reconcileSupplierPayable((int) $grn->supplier_id);
+            $this->reconcileSupplierPayable($supplierId);
         });
 
         return response()->json(['data' => $grnCheque->fresh()]);
+    }
+
+    private function saveGrnStatus(Grn $grn): void
+    {
+        $balance = round((float) $grn->total - (float) $grn->paid, 2);
+        $grn->status = $balance <= 0 ? 'paid' : ((float) $grn->paid > 0 ? 'partial' : 'unpaid');
+        $grn->save();
     }
 
     /**

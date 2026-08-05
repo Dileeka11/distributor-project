@@ -734,6 +734,15 @@ function SettleModal({ side, rec, editSettlement, outstandingOverride, chequeRow
         <div>
           <div className="text-[12px]" style={{ color: 'var(--text-muted)' }}>Current outstanding</div>
           <div className="mono text-[22px] font-extrabold" style={{ color: 'var(--red)' }}>Rs {fmt(outstanding)}</div>
+          {/* Where the figure comes from: the credit balance typed in when the
+              customer was added (less whatever has been collected against it),
+              plus what is still unpaid on their credit invoices. */}
+          {side === 'receivable' && outstandingOverride === undefined && (
+            <div className="text-[11.5px] mt-1" style={{ color: 'var(--text-muted)' }}>
+              Opening credit balance Rs {fmt(Number((rec as Customer).credit_limit))}
+              {' + unpaid invoices Rs '}{fmt(Number((rec as Customer).balance))}
+            </div>
+          )}
         </div>
         <div className="grid place-items-center w-11 h-11 rounded-[9px] font-bold" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>{initials(rec.name)}</div>
       </div>
