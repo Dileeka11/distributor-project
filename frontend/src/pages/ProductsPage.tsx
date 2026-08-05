@@ -10,7 +10,7 @@ import { Empty, Pagination } from '@/components/ui/Common';
 import { Modal } from '@/components/ui/Modal';
 import { Field, Input, Select, MoneyInput } from '@/components/ui/Field';
 import { TotalRow } from '@/pages/InvoicesPage';
-import type { Category, Item, ItemBatch, Product, ProductComponent } from '@/types';
+import type { Category, Item, ItemBatch, Product } from '@/types';
 
 interface DraftLine { item_id: number | ''; batch_id: number | ''; qty: string; price: string; }
 const blankLine = (): DraftLine => ({ item_id: '', batch_id: '', qty: '1', price: '0' });
@@ -347,45 +347,82 @@ function ProductBuilder({ onClose, onSaved }: { onClose: () => void; onSaved: ()
 }
 
 // Build more units of an existing product from its saved recipe.
+/**
+ * Assemble a run of an existing product.
+ *
+ * Built the same way as a new product: each line names an item, the cost lot it
+ * comes out of, and the whole quantity the run consumes. The recipe only seeds
+ * it — a run that used more, or drew from a different lot, is entered as it
+ * actually happened.
+ */
 function AssembleModal({ product, onClose, onSaved }: { product: Product; onClose: () => void; onSaved: () => void }) {
   const [units, setUnits] = useState('1');
+  const [lines, setLines] = useState<DraftLine[]>([]);
+  const [items, setItems] = useState<Item[]>([]);
   const [batchesByItem, setBatchesByItem] = useState<Record<number, ItemBatch[]>>({});
-  const [batchChoice, setBatchChoice] = useState<Record<number, number | ''>>({});
   const [busy, setBusy] = useState(false);
 
-  const comps = product.components ?? [];
+  const loadBatches = (itemId: number) => {
+    if (!itemId) return;
+    void http.get(`/api/items/${itemId}/batches`).then((r) =>
+      setBatchesByItem((m) => ({ ...m, [itemId]: r.data.data })));
+  };
 
-  // Load each component's GRN cost-batches so the run deducts the right lot.
   useEffect(() => {
-    comps.forEach((c) => {
-      void http.get(`/api/items/${Number(c.item_id)}/batches`).then((r) =>
-        setBatchesByItem((m) => ({ ...m, [Number(c.item_id)]: r.data.data })));
-    });
+    void http.get('/api/items').then((r) => setItems(r.data.data));
+    const comps = product.components ?? [];
+    setLines(comps.map((c) => ({
+      item_id: Number(c.item_id),
+      batch_id: '' as number | '',
+      // Seeded at one unit's worth, rounded up to whole items.
+      qty: String(Math.max(1, Math.ceil(Number(c.qty)))),
+      price: Number(c.price).toFixed(2),
+    })));
+    comps.forEach((c) => loadBatches(Number(c.item_id)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const looseFor = (itemId: number) => {
-    const total = Number(comps.find((c) => Number(c.item_id) === itemId)?.item?.stock ?? 0);
-    const inBatches = (batchesByItem[itemId] ?? []).reduce((s, b) => s + Number(b.qty_remaining), 0);
-    return total - inBatches;
-  };
-  const batchesOf = (c: ProductComponent) => batchesByItem[Number(c.item_id)] ?? [];
-  const chosenBatch = (c: ProductComponent) =>
-    batchesOf(c).find((b) => Number(b.id) === batchChoice[Number(c.item_id)]);
-  const haveFor = (c: ProductComponent) => {
-    const choice = batchChoice[Number(c.item_id)];
-    if (choice === 0) return looseFor(Number(c.item_id));
-    const b = chosenBatch(c);
-    return b ? Number(b.qty_remaining) : Number(c.item?.stock ?? 0);
-  };
+  }, [product.id]);
 
   const unitsN = Math.max(1, Number(units) || 1);
-  // Most units the current component (or chosen batch) stock can build.
-  const maxUnits = comps.length
-    ? Math.min(...comps.map((c) => Math.floor(haveFor(c) / Math.max(1, Number(c.qty)))))
-    : 0;
-  const batchesPicked = comps.every((c) => batchesOf(c).length === 0 || (batchChoice[Number(c.item_id)] !== undefined && batchChoice[Number(c.item_id)] !== ''));
-  const canSave = unitsN >= 1 && unitsN <= maxUnits && batchesPicked && !busy;
+  const itemFor = (l: DraftLine) => items.find((x) => Number(x.id) === l.item_id);
+  const batchesFor = (l: DraftLine) => (l.item_id ? batchesByItem[Number(l.item_id)] ?? [] : []);
+  const batchFor = (l: DraftLine) => batchesFor(l).find((b) => Number(b.id) === l.batch_id);
+  const looseFor = (it: Item) =>
+    Number(it.stock) - (batchesByItem[Number(it.id)] ?? []).reduce((s, b) => s + Number(b.qty_remaining), 0);
+  const oldStockPrice = (it: Item) =>
+    Number(it.wholesale_price) * (1 - (Number(it.opening_discount ?? 0) || 0) / 100);
+
+  const setLine = (i: number, patch: Partial<DraftLine>) =>
+    setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
+  const pickItem = (i: number, id: number | '') => {
+    const item = items.find((x) => Number(x.id) === id);
+    setLine(i, { item_id: id, batch_id: '', price: item ? Number(item.retail_price).toFixed(2) : '0' });
+    if (id) loadBatches(Number(id));
+  };
+  const pickBatch = (i: number, l: DraftLine, v: number | '') => {
+    const it = itemFor(l);
+    if (v === '') { setLine(i, { batch_id: '' }); return; }
+    if (v === 0) { setLine(i, { batch_id: 0, price: it ? oldStockPrice(it).toFixed(2) : '0' }); return; }
+    const b = batchesFor(l).find((x) => Number(x.id) === v);
+    setLine(i, { batch_id: v, price: b ? Number(b.unit_cost).toFixed(2) : '0' });
+  };
+  const takenElsewhere = (l: DraftLine, exceptIdx: number) =>
+    l.item_id === '' ? 0 : lines.reduce(
+      (s, x, idx) => s + (idx !== exceptIdx && x.item_id === l.item_id && x.batch_id === l.batch_id ? (Number(x.qty) || 0) : 0), 0);
+  const lotTaken = (l: DraftLine, exceptIdx: number, batchId: number) =>
+    lines.some((x, idx) => idx !== exceptIdx && x.item_id === l.item_id && x.batch_id === batchId);
+  const addLine = () => setLines((ls) => [...ls, blankLine()]);
+  const delLine = (i: number) => setLines((ls) => (ls.length > 1 ? ls.filter((_, idx) => idx !== i) : ls));
+
+  const validLines = lines.filter((l) => l.item_id !== '' && Number(l.qty) > 0);
+  const runCost = validLines.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.price) || 0), 0);
+  const anyShort = lines.some((l, i) => {
+    const it = itemFor(l);
+    if (!it || !(Number(l.qty) > 0)) return false;
+    const batch = batchFor(l);
+    const pool = l.batch_id === 0 ? looseFor(it) : batch ? Number(batch.qty_remaining) : Number(it.stock);
+    return Number(l.qty) > pool - takenElsewhere(l, i);
+  });
+  const canSave = validLines.length > 0 && !anyShort && !busy;
 
   const save = async () => {
     if (!canSave) return;
@@ -393,7 +430,12 @@ function AssembleModal({ product, onClose, onSaved }: { product: Product; onClos
     try {
       await http.post(`/api/products/${product.id}/assemble`, {
         units: unitsN,
-        lines: comps.map((c) => ({ item_id: Number(c.item_id), batch_id: batchChoice[Number(c.item_id)] || null })),
+        lines: validLines.map((l) => ({
+          item_id: l.item_id,
+          batch_id: l.batch_id === '' || l.batch_id === 0 ? null : l.batch_id,
+          qty: Number(l.qty),
+          price: Number(l.price) || 0,
+        })),
       });
       toast(`Assembled ${fmt0(unitsN)} × ${product.item?.name ?? 'product'}`);
       onSaved();
@@ -403,50 +445,109 @@ function AssembleModal({ product, onClose, onSaved }: { product: Product; onClos
 
   return (
     <Modal
+      lg
       title={`Assemble — ${product.item?.name ?? ''}`}
       onClose={onClose}
-      footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button variant="primary" disabled={!canSave} onClick={save}>Assemble</Button></>}
+      footer={<>
+        <span className="mr-auto text-[13px]" style={{ color: 'var(--text-muted)' }}>
+          Run cost <b className="money" style={{ color: 'var(--text)', fontSize: 16 }}>Rs {fmt(runCost)}</b>
+          {' '}· per unit <b className="money" style={{ color: 'var(--text)' }}>Rs {fmt(runCost / unitsN)}</b>
+        </span>
+        <Button variant="ghost" onClick={onClose}>Cancel</Button>
+        <Button variant="primary" disabled={!canSave} onClick={save}>Assemble</Button>
+      </>}
     >
-      <div className="card overflow-hidden mb-4">
-        <table className="tbl">
-          <thead><tr><th>Component</th><th className="num">Per unit</th><th className="num">Needed</th><th className="num">Available</th></tr></thead>
+      <div className="grid grid-cols-2 gap-4 mb-4">
+        <Field label="Units to assemble" req hint="How many finished units this run makes.">
+          <Input className="mono text-right" inputMode="numeric" value={units}
+            onChange={(e) => setUnits(e.target.value.replace(/\D/g, ''))} />
+        </Field>
+      </div>
+
+      <div className="text-[13px] font-semibold mb-2" style={{ color: 'var(--text-muted)' }}>
+        Component items <span className="font-medium" style={{ color: 'var(--text-faint)' }}>· the whole quantity used for all {fmt0(unitsN)} unit{unitsN === 1 ? '' : 's'}</span>
+      </div>
+      <div className="card p-2.5 mb-2">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr>
+              <th className="text-left text-[11px] uppercase tracking-wider font-bold p-2" style={{ color: 'var(--text-faint)', width: '30%' }}>Item</th>
+              <th className="text-left text-[11px] uppercase font-bold p-2" style={{ color: 'var(--text-faint)', width: '28%' }}>Cost</th>
+              <th className="text-right text-[11px] uppercase font-bold p-2" style={{ color: 'var(--text-faint)', width: 70 }}>Qty</th>
+              <th className="text-right text-[11px] uppercase font-bold p-2" style={{ color: 'var(--text-faint)', width: 110 }}>Price</th>
+              <th className="text-right text-[11px] uppercase font-bold p-2" style={{ color: 'var(--text-faint)' }}>Amount</th>
+              <th style={{ width: 36 }}></th>
+            </tr>
+          </thead>
           <tbody>
-            {comps.map((c) => {
-              const need = Number(c.qty) * unitsN;
-              const have = haveFor(c);
+            {lines.map((l, i) => {
+              const it = itemFor(l);
+              const batch = batchFor(l);
+              const pool = l.batch_id === 0 ? (it ? looseFor(it) : 0) : batch ? Number(batch.qty_remaining) : Number(it?.stock ?? 0);
+              const have = pool - takenElsewhere(l, i);
+              const over = it ? (Number(l.qty) || 0) > have : false;
               return (
-                <tr key={c.id}>
-                  <td>
-                    <div className="font-semibold">{c.name}</div>
-                    {batchesOf(c).length > 0 && (
-                      <Select
-                        value={batchChoice[Number(c.item_id)] !== undefined && batchChoice[Number(c.item_id)] !== '' ? String(batchChoice[Number(c.item_id)]) : ''}
-                        onChange={(e) => {
-                          const v = e.target.value === '' ? '' : Number(e.target.value);
-                          setBatchChoice((m) => ({ ...m, [Number(c.item_id)]: v }));
-                        }}
-                        style={{ height: 32, fontSize: 12, marginTop: 6, maxWidth: 260 }}
-                      >
-                        <option value="">Select cost-batch…</option>
-                        {looseFor(Number(c.item_id)) > 0 && (
-                          <option value="0">old stock · {looseFor(Number(c.item_id))} left</option>
-                        )}
-                        {batchesOf(c).map((b) => <option key={b.id} value={String(Number(b.id))}>GRN cost Rs {fmt(Number(b.unit_cost))} · {b.qty_remaining} left</option>)}
-                      </Select>
+                <tr key={i} className="border-t border-border">
+                  <td className="p-1.5 align-top">
+                    <Select value={l.item_id === '' ? '' : String(l.item_id)}
+                      onChange={(e) => pickItem(i, e.target.value ? Number(e.target.value) : '')}
+                      style={{ height: 36, fontSize: 13 }}>
+                      <option value="">Select item…</option>
+                      {items.map((x) => (
+                        <option key={x.id} value={String(Number(x.id))} disabled={Number(x.stock) <= 0}>
+                          {x.code} · {x.name}{Number(x.stock) <= 0 ? ' (out)' : ''}
+                        </option>
+                      ))}
+                    </Select>
+                    {it && (
+                      <div className="text-[12px] mt-1" style={{ color: over ? 'var(--red)' : 'var(--text-muted)' }}>
+                        Stock: {fmt0(Number(it.stock))}
+                        {over ? ` — need ${fmt0(Number(l.qty) || 0)}, only ${fmt0(Math.max(0, have))} available` : ''}
+                      </div>
                     )}
                   </td>
-                  <td className="num mono">{fmt0(Number(c.qty))}</td>
-                  <td className="num mono" style={{ color: need > have ? 'var(--red)' : undefined }}>{fmt0(need)}</td>
-                  <td className="num mono">{fmt0(have)}</td>
+                  <td className="p-1.5 align-top">
+                    <Select value={l.batch_id === '' ? '' : String(l.batch_id)} disabled={l.item_id === ''}
+                      onChange={(e) => pickBatch(i, l, e.target.value === '' ? '' : Number(e.target.value))}
+                      style={{ height: 36, fontSize: 12.5 }}>
+                      <option value="">
+                        {l.item_id === '' ? 'Pick an item first'
+                          : batchesFor(l).length === 0 && !(it && looseFor(it) > 0) ? 'No cost lots' : 'Select cost…'}
+                      </option>
+                      {it && looseFor(it) > 0 && (
+                        <option value="0" disabled={lotTaken(l, i, 0)}>
+                          Rs {fmt(oldStockPrice(it))} · old stock · {fmt0(looseFor(it))} left{lotTaken(l, i, 0) ? ' (already used)' : ''}
+                        </option>
+                      )}
+                      {batchesFor(l).map((b) => (
+                        <option key={b.id} value={String(Number(b.id))} disabled={lotTaken(l, i, Number(b.id))}>
+                          Rs {fmt(Number(b.unit_cost))} · GRN lot · {fmt0(Number(b.qty_remaining))} left{lotTaken(l, i, Number(b.id)) ? ' (already used)' : ''}
+                        </option>
+                      ))}
+                    </Select>
+                  </td>
+                  <td className="p-1.5 align-top">
+                    <Input className="mono text-right" value={l.qty}
+                      onChange={(e) => setLine(i, { qty: e.target.value.replace(/\D/g, '') })}
+                      style={{ height: 36, borderColor: over ? 'var(--red)' : undefined }} />
+                  </td>
+                  <td className="p-1.5 align-top">
+                    <MoneyInput className="text-right" value={l.price} onChange={(v) => setLine(i, { price: v })} style={{ height: 36 }} />
+                  </td>
+                  <td className="p-1.5 text-right money font-semibold align-top">{fmt((Number(l.qty) || 0) * (Number(l.price) || 0))}</td>
+                  <td className="p-1.5 text-right align-top">
+                    <button className="grid place-items-center w-7 h-7 rounded-md hover:bg-surface-2" onClick={() => delLine(i)} type="button"><X size={15} /></button>
+                  </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
+        <Button variant="subtle" size="sm" icon={<Plus size={14} />} onClick={addLine} style={{ margin: 8 }}>Add item</Button>
       </div>
-      <Field label="Units to assemble" req hint={maxUnits > 0 ? `Stock allows up to ${fmt0(maxUnits)} unit${maxUnits === 1 ? '' : 's'}.` : 'Not enough component stock to assemble any units.'}>
-        <Input className="mono text-right" value={units} onChange={(e) => setUnits(e.target.value.replace(/\D/g, ''))} />
-      </Field>
+      <div className="text-[11.5px]" style={{ color: 'var(--text-faint)' }}>
+        Seeded from the recipe — change the items, cost lots or quantities to match what this run actually used.
+      </div>
     </Modal>
   );
 }

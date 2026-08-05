@@ -117,30 +117,48 @@ class ProductController extends Controller
     {
         $data = $request->validate([
             'units' => ['required', 'integer', 'min:1'],
-            // Optional per-item cost-batch choices for this assembly run.
+            // The run is entered line by line, exactly as when the product was
+            // created: which item, out of which cost lot, and how many in total.
+            // Falls back to the stored recipe when no lines are sent.
             'lines' => ['nullable', 'array'],
-            'lines.*.item_id' => ['required_with:lines', 'integer'],
+            'lines.*.item_id' => ['required_with:lines', 'exists:items,id'],
             'lines.*.batch_id' => ['nullable', 'exists:item_batches,id'],
+            'lines.*.qty' => ['nullable', 'integer', 'min:1'],
+            'lines.*.price' => ['nullable', 'numeric', 'min:0'],
         ]);
 
         DB::transaction(function () use ($product, $data) {
             $units = (int) $data['units'];
             $product->loadMissing('components');
 
-            $batchByItem = [];
-            foreach ($data['lines'] ?? [] as $l) {
-                $batchByItem[(int) $l['item_id']] = $l['batch_id'] ?? null;
-            }
+            $sent = $data['lines'] ?? [];
+            $hasQty = collect($sent)->contains(fn ($l) => isset($l['qty']));
 
-            $lines = $product->components
-                ->map(fn ($c) => [
-                    'item_id' => $c->item_id,
-                    'qty' => $c->qty,
-                    'price' => $c->price,
-                    'batch_id' => $batchByItem[(int) $c->item_id] ?? null,
-                ])
-                ->all();
-            $components = $this->lockComponents($lines, $units);
+            if ($sent && $hasQty) {
+                // Quantities given are the whole run, so nothing is multiplied.
+                $lines = array_map(fn ($l) => [
+                    'item_id' => (int) $l['item_id'],
+                    'batch_id' => $l['batch_id'] ?? null,
+                    'qty' => (int) $l['qty'],
+                    'price' => (float) ($l['price'] ?? 0),
+                ], $sent);
+                $components = $this->lockComponents($lines, 1);
+            } else {
+                // No quantities: run the stored per-unit recipe up to `units`.
+                $batchByItem = [];
+                foreach ($sent as $l) {
+                    $batchByItem[(int) $l['item_id']] = $l['batch_id'] ?? null;
+                }
+                $lines = $product->components
+                    ->map(fn ($c) => [
+                        'item_id' => $c->item_id,
+                        'qty' => $c->qty,
+                        'price' => $c->price,
+                        'batch_id' => $batchByItem[(int) $c->item_id] ?? null,
+                    ])
+                    ->all();
+                $components = $this->lockComponents($lines, $units);
+            }
 
             foreach ($components as $c) {
                 $this->consume($c);
