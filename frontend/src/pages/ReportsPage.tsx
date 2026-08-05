@@ -5,6 +5,7 @@ import { fmt, fmt0, prettyDate } from '@/lib/format';
 import { PageHead } from '@/components/PageHead';
 import { Button } from '@/components/ui/Button';
 import { Segmented, Empty } from '@/components/ui/Common';
+import { Badge, statusBadge } from '@/components/ui/Badge';
 import { Input } from '@/components/ui/Field';
 import { useSettings } from '@/store/settings';
 import type { Customer, Supplier, Settlement, ChequeRecord, GrnChequeRecord, Grn, Invoice } from '@/types';
@@ -160,7 +161,32 @@ export default function ReportsPage() {
       ? `All ${isCust ? 'customers' : 'suppliers'}`
       : (parties.find((p) => p.id === applied.partyId)?.name ?? '—');
 
-    return { rows, byMode, total, totalQty, outstanding, isCust, partyName };
+    // Every bill the party had in the window — invoices for a customer, GRNs
+    // for a supplier — so the report is the whole account, not only the money
+    // that came in. Cancelled documents are void and left out.
+    const txns = (isCust
+      ? invoices
+          .filter((i) => inRange(String(i.date)) && partyOk(i.customer_id, null) && !i.cancelled_at)
+          .map((i) => ({
+            id: `inv-${i.id}`, date: String(i.date).slice(0, 10), no: i.no,
+            kind: i.type === 'cash' ? 'Cash invoice' : 'Credit invoice',
+            party: i.customer?.name ?? '—',
+            total: Number(i.total), paid: Number(i.paid), status: i.status,
+          }))
+      : grns
+          .filter((g) => inRange(String(g.date)) && partyOk(null, g.supplier_id) && !g.cancelled_at)
+          .map((g) => ({
+            id: `grn-${g.id}`, date: String(g.date).slice(0, 10), no: g.no,
+            kind: g.type === 'cash' ? 'Cash purchase' : 'Credit purchase',
+            party: g.supplier?.name ?? '—',
+            total: Number(g.total), paid: Number(g.paid), status: g.status,
+          }))
+    ).sort((a, b) => b.date.localeCompare(a.date));
+
+    const txnTotal = txns.reduce((s, t) => s + t.total, 0);
+    const txnPaid = txns.reduce((s, t) => s + t.paid, 0);
+
+    return { rows, byMode, total, totalQty, outstanding, isCust, partyName, txns, txnTotal, txnPaid };
   }, [applied, settlements, cheques, grnCheques, grns, invoices, grnQty, receivables, payables, parties]);
 
   const periodLabel = applied
@@ -203,6 +229,22 @@ export default function ReportsPage() {
       <div class="chips">${modeSummary || '<span class="chip">No transactions</span>'}</div>
       <table><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="${cols}" style="text-align:center;color:#999;padding:18px">No transactions in this period</td></tr>`}</tbody>
       <tfoot><tr><td colspan="${report.isCust ? 4 : 4}">Total ${moneyHdr.toLowerCase()}</td>${report.isCust ? '' : `<td class="r">${report.totalQty || '—'}</td>`}<td class="r">Rs ${fmt(report.total)}</td></tr></tfoot></table>
+      <h2 style="font-size:14px;margin:22px 0 8px">${report.isCust ? 'Invoices' : 'Purchases'} in this period</h2>
+      <table><thead><tr>
+        <th>Date</th><th>${report.isCust ? 'Invoice' : 'GRN'}</th><th>Type</th><th>Party</th>
+        <th class="r">Total (Rs)</th><th class="r">Paid (Rs)</th><th class="r">Balance (Rs)</th>
+      </tr></thead><tbody>
+        ${report.txns.map((t) => `<tr>
+            <td>${prettyDate(t.date)}</td><td>${t.no}</td><td>${t.kind}</td><td>${t.party}</td>
+            <td class="r">${fmt(t.total)}</td><td class="r">${fmt(t.paid)}</td>
+            <td class="r">${t.total - t.paid > 0 ? fmt(t.total - t.paid) : '—'}</td>
+          </tr>`).join('')
+          || `<tr><td colspan="7" style="text-align:center;color:#999;padding:18px">Nothing billed in this period</td></tr>`}
+      </tbody>
+      <tfoot><tr><td colspan="4">Total billed</td>
+        <td class="r">Rs ${fmt(report.txnTotal)}</td>
+        <td class="r">Rs ${fmt(report.txnPaid)}</td>
+        <td class="r">Rs ${fmt(report.txnTotal - report.txnPaid)}</td></tr></tfoot></table>
       <div class="out">Current outstanding ${report.isCust ? 'receivable' : 'payable'}: <b>Rs ${fmt(report.outstanding)}</b></div>
       </body></html>`);
     w.document.close();
@@ -297,6 +339,70 @@ export default function ReportsPage() {
               </table>
             </div>
             {report.rows.length === 0 && <Empty icon={<FileText size={40} />} title="No transactions" sub="No collections/payments for this party in the selected period." />}
+
+            {/* Every bill in the window, not only the money that moved. */}
+            <div className="border-t border-border">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+                <div className="flex items-center gap-3">
+                  <div className="text-[14.5px] font-bold">{report.isCust ? 'Invoices' : 'Purchases'} in this period</div>
+                  <span className="chip">{report.partyName}</span>
+                  <span className="chip">{periodLabel}</span>
+                </div>
+                <span className="chip">{report.txns.length} records</span>
+              </div>
+              <div style={{ maxHeight: 420, overflow: 'auto' }}>
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>{report.isCust ? 'Invoice' : 'GRN'}</th>
+                      <th>Type</th>
+                      <th>Party</th>
+                      <th className="num">Total</th>
+                      <th className="num">{report.isCust ? 'Paid' : 'Paid out'}</th>
+                      <th className="num">Balance</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {report.txns.map((t) => (
+                      <tr key={t.id}>
+                        <td className="text-[12px]" style={{ color: 'var(--text-muted)' }}>{prettyDate(t.date)}</td>
+                        <td className="mono font-semibold">{t.no}</td>
+                        <td className="text-[12px]" style={{ color: 'var(--text-muted)' }}>{t.kind}</td>
+                        <td className="font-medium">{t.party}</td>
+                        <td className="num money font-bold">{fmt(t.total)}</td>
+                        <td className="num money">{fmt(t.paid)}</td>
+                        <td className="num money" style={{ color: t.total - t.paid > 0 ? 'var(--red)' : 'var(--text-faint)' }}>
+                          {t.total - t.paid > 0 ? fmt(t.total - t.paid) : '—'}
+                        </td>
+                        <td><Badge kind={statusBadge(t.status).kind} dot>{statusBadge(t.status).label}</Badge></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {report.txns.length === 0 && (
+                <Empty icon={<FileText size={40} />} title={report.isCust ? 'No invoices' : 'No purchases'}
+                  sub="Nothing was billed to this party in the selected period." />
+              )}
+              {report.txns.length > 0 && (
+                <div className="flex flex-wrap items-center gap-6 px-5 py-4 border-t border-border bg-surface-2">
+                  <div>
+                    <div className="text-[11.5px]" style={{ color: 'var(--text-muted)' }}>Total billed</div>
+                    <div className="mono text-[18px] font-extrabold">Rs {fmt(report.txnTotal)}</div>
+                  </div>
+                  <div>
+                    <div className="text-[11.5px]" style={{ color: 'var(--text-muted)' }}>Settled</div>
+                    <div className="mono text-[18px] font-extrabold" style={{ color: 'var(--green)' }}>Rs {fmt(report.txnPaid)}</div>
+                  </div>
+                  <div>
+                    <div className="text-[11.5px]" style={{ color: 'var(--text-muted)' }}>Still due</div>
+                    <div className="mono text-[18px] font-extrabold" style={{ color: 'var(--red)' }}>Rs {fmt(report.txnTotal - report.txnPaid)}</div>
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Footer: totals + outstanding + generate */}
             <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-4 border-t border-border bg-surface-2">
