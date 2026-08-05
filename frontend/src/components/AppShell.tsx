@@ -1,10 +1,11 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
-import { LayoutDashboard, Package, Boxes, SlidersHorizontal, ArrowLeftRight, Truck, Users, ReceiptText, PackageOpen, Scale, FileBarChart2, UserCog, CalendarCheck, Wallet, ShieldCheck, ChevronDown, Settings as SettingsIcon, LogOut, Warehouse, Undo2 } from 'lucide-react';
+import { LayoutDashboard, Package, Boxes, SlidersHorizontal, ArrowLeftRight, Truck, Users, ReceiptText, PackageOpen, Scale, FileBarChart2, UserCog, CalendarCheck, Wallet, ShieldCheck, ChevronDown, Settings as SettingsIcon, LogOut, Warehouse, Undo2, Menu } from 'lucide-react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '@/store/auth';
 import { useSettings } from '@/store/settings';
 import { canAccess } from '@/lib/pages';
 import { Notifications } from '@/components/Notifications';
+import { PageLoader } from '@/components/Loading';
 
 interface NavEntry { to: string; label: string; icon: typeof LayoutDashboard; end?: boolean; group: string; perm: string; }
 const NAV: NavEntry[] = [
@@ -41,6 +42,11 @@ export function AppShell() {
 
   const [menu, setMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // The drawer closes itself on navigation, so tapping a link on a phone does
+  // not leave the menu covering the page it just opened.
+  const [navOpen, setNavOpen] = useState(false);
+  useEffect(() => { setNavOpen(false); }, [pathname]);
   useEffect(() => {
     if (!menu) return;
     const onDoc = (e: MouseEvent) => { if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenu(false); };
@@ -50,7 +56,19 @@ export function AppShell() {
 
   return (
     <div className="flex h-screen overflow-hidden">
-      <aside className="w-[244px] flex-shrink-0 bg-surface border-r border-border flex flex-col px-3.5 py-4 gap-1">
+      {/* On a narrow screen the sidebar is a drawer; tapping the page closes it. */}
+      {navOpen && (
+        <div
+          className="fixed inset-0 z-40 lg:hidden"
+          style={{ background: 'rgba(18,20,26,0.45)', animation: 'fade .16s ease' }}
+          onClick={() => setNavOpen(false)}
+        />
+      )}
+      <aside
+        className={`w-[244px] flex-shrink-0 bg-surface border-r border-border flex flex-col px-3.5 py-4 gap-1
+          fixed inset-y-0 left-0 z-50 transition-transform duration-200 lg:static lg:translate-x-0
+          ${navOpen ? 'translate-x-0' : '-translate-x-full'}`}
+      >
         <div className="flex items-center gap-3 px-2 pb-4">
           <div className="grid place-items-center w-[34px] h-[34px] rounded-[9px] font-extrabold text-white" style={{ background: 'var(--accent)' }}>
             {settings.logo}
@@ -95,8 +113,17 @@ export function AppShell() {
       </aside>
 
       <main className="flex-1 flex flex-col overflow-hidden min-w-0">
-        <header className="relative z-30 h-[62px] flex-shrink-0 border-b border-border flex items-center gap-4 px-7" style={{ background: 'color-mix(in oklab, var(--surface) 80%, transparent)', backdropFilter: 'blur(8px)' }}>
-          <div className="text-[18px] font-bold tracking-tight">{current?.label ?? 'Dashboard'}</div>
+        <header className="relative z-30 h-[62px] flex-shrink-0 border-b border-border flex items-center gap-3 px-4 sm:px-7" style={{ background: 'color-mix(in oklab, var(--surface) 80%, transparent)', backdropFilter: 'blur(8px)' }}>
+          <button
+            type="button"
+            className="grid place-items-center w-9 h-9 rounded-[9px] hover:bg-surface-2 lg:hidden flex-shrink-0"
+            style={{ border: '1px solid var(--border)' }}
+            onClick={() => setNavOpen(true)}
+            aria-label="Open menu"
+          >
+            <Menu size={18} />
+          </button>
+          <div className="text-[16px] sm:text-[18px] font-bold tracking-tight truncate">{current?.label ?? 'Dashboard'}</div>
 
           <div className="ml-auto flex items-center gap-2.5">
           <Notifications />
@@ -125,9 +152,9 @@ export function AppShell() {
           </div>
           </div>
         </header>
-        <div className="flex-1 overflow-y-auto px-7 py-6 pb-16">
+        <div className="flex-1 overflow-y-auto px-4 sm:px-7 py-5 sm:py-6 pb-16">
           <div className={wide ? 'w-full' : 'max-w-[1180px] mx-auto'}>
-            <Suspense fallback={<div className="grid place-items-center py-20 text-[13px]" style={{ color: 'var(--text-muted)' }}>Loading…</div>}>
+            <Suspense fallback={<PageLoader />}>
               <Outlet />
             </Suspense>
           </div>

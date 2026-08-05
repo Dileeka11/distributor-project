@@ -146,3 +146,42 @@ body {
 @keyframes fadeUp { from { transform: translateY(7px); } }
 @keyframes pop { from { opacity: 0; transform: translateY(8px) scale(.98); } }
 @keyframes fade { from { opacity: 0; } }
+/* Loading indicators — the top bar sweeps, the page spinner turns. */
+@keyframes kkSweep { 0% { transform: translateX(-100%); } 100% { transform: translateX(350%); } }
+@keyframes kkSpin { to { transform: rotate(360deg); } }
+
+/* ---------------------------------------------------------------------------
+   Small screens.
+
+   The pages were laid out for a desktop: fixed multi-column grids, wide tables
+   and roomy modals. Rather than rewrite every page, the column counts collapse
+   and the wide things are allowed to scroll or shrink, so a phone gets a
+   readable single column and a tablet gets two.
+   --------------------------------------------------------------------------- */
+
+/* Tables keep their shape and scroll inside their card instead of squeezing
+   columns down to a few characters. The card already scrolls (`.card:has(> .tbl)`). */
+@media (max-width: 900px) {
+  .tbl { min-width: 640px; }
+  .tbl th, .tbl td { padding-left: 12px; padding-right: 12px; }
+  .card:has(> .tbl) { max-height: none; }
+}
+
+@media (max-width: 1024px) {
+  /* Three- and four-up rows become two-up. */
+  .grid-cols-3, .grid-cols-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 640px) {
+  /* Everything stacks. */
+  .grid-cols-2, .grid-cols-3, .grid-cols-4 { grid-template-columns: minmax(0, 1fr); }
+
+  /* Page headers and toolbars wrap instead of pushing buttons off-screen. */
+  .flex.items-center.justify-between { flex-wrap: wrap; gap: 12px; }
+
+  /* Modals take the screen: side margins and inner padding shrink, and the
+     sheet is allowed to run taller since there is nothing beside it. */
+  .fixed.inset-0 > .card { max-height: calc(100vh - 24px); }
+  .fixed.inset-0.grid { padding: 12px; }
+  .fixed.inset-0 > .card > div { padding-left: 16px; padding-right: 16px; }
+}

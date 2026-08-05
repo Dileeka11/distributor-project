@@ -5,6 +5,7 @@ import { useSettings } from '@/store/settings';
 import { canAccess, firstAllowed } from '@/lib/pages';
 import { startPresenceHeartbeat } from '@/lib/sessionGuard';
 import { reloadIfBuildChanged } from '@/lib/buildVersion';
+import { PageLoader, TopProgress } from '@/components/Loading';
 import { AppShell } from '@/components/AppShell';
 import LoginPage from '@/pages/LoginPage';
 
@@ -55,19 +56,24 @@ export default function App() {
   }, [user]);
 
   if (!ready) {
-    return <div className="grid place-items-center h-screen text-sm" style={{ color: 'var(--text-muted)' }}>Loading…</div>;
+    return <div className="grid place-items-center h-screen"><PageLoader /></div>;
   }
 
   if (!user) {
     return (
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="*" element={<Navigate to="/login" replace />} />
-      </Routes>
+      <>
+        <TopProgress />
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </Routes>
+      </>
     );
   }
 
   return (
+    <>
+    <TopProgress />
     <Routes>
       <Route path="/login" element={<Navigate to="/" replace />} />
       <Route element={<AppShell />}>
@@ -92,5 +98,6 @@ export default function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
+    </>
   );
 }

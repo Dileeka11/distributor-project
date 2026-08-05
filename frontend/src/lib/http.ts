@@ -1,4 +1,5 @@
 import axios, { AxiosError } from 'axios';
+import { progressDone, progressStart } from '@/lib/progress';
 
 export const http = axios.create({
   baseURL: import.meta.env.VITE_API_URL ?? '/',
@@ -22,6 +23,14 @@ http.interceptors.request.use(async (config) => {
   }
   return config;
 });
+
+// Every call, however it ends, moves the progress bar. Registered as a pair so
+// a failed request can never leave the bar running.
+http.interceptors.request.use((config) => { progressStart(); return config; });
+http.interceptors.response.use(
+  (res) => { progressDone(); return res; },
+  (err) => { progressDone(); return Promise.reject(err); },
+);
 
 export type ApiError = AxiosError<{ message?: string; errors?: Record<string, string[]> }>;
 
