@@ -74,7 +74,7 @@ function printGrnDoc(d: Grn, settings: AppSettings): void {
     <div class="page">
       <div class="head">
         <div style="display:flex;gap:14px;align-items:flex-start">
-          <span class="logo">${settings.logo || 'K'}</span>
+          <span class="logo">${settings.logo || 'DM'}</span>
           <div>
             <div class="co">${settings.company || 'Distributor'}</div>
             <div class="muted">

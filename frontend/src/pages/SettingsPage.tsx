@@ -158,7 +158,7 @@ function Branding({ settings, patch }: { settings: AppSettings; patch: (p: Parti
     <>
       <Panel title="Logo & name" sub="Shown in the sidebar, login screen and on printed invoices.">
         <Field label="System / company name" hint="Appears next to the logo mark.">
-          <Input value={company} onChange={(e) => setCompany(e.target.value)} onBlur={() => void patch({ company })} placeholder="e.g. Kadurata Kuda" />
+          <Input value={company} onChange={(e) => setCompany(e.target.value)} onBlur={() => void patch({ company })} placeholder="e.g. DIAMOND" />
         </Field>
         <div className="h-4" />
         <Field label="Logo monogram" hint="1–2 characters used inside the coloured logo mark.">

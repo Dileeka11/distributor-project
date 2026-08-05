@@ -177,8 +177,14 @@ export default function PayrollPage() {
 }
 
 // Searchable employee filter — pick by name or code, or "All employees".
-function EmployeePicker({ employees, value, onChange }: {
+/**
+ * Searchable employee dropdown. Used as a page filter (with an "all" row) and
+ * inside the generate form, where a payslip needs one specific employee, so the
+ * "all" row is dropped and the label doubles as the empty-state placeholder.
+ */
+function EmployeePicker({ employees, value, onChange, allLabel = 'All employees', showAll = true, width = 240 }: {
   employees: Employee[]; value: number | ''; onChange: (v: number | '') => void;
+  allLabel?: string; showAll?: boolean; width?: number | string;
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
@@ -196,9 +202,11 @@ function EmployeePicker({ employees, value, onChange }: {
   const pick = (v: number | '') => { onChange(v); setOpen(false); setQ(''); };
 
   return (
-    <div ref={ref} className="relative" style={{ width: 240 }}>
+    <div ref={ref} className="relative" style={{ width }}>
       <button type="button" onClick={() => setOpen((o) => !o)} className="select flex items-center justify-between text-left w-full" style={{ height: 40, backgroundImage: 'none', paddingRight: 12 }}>
-        <span className="truncate" style={{ color: selected ? 'var(--text)' : 'var(--text-muted)' }}>{selected ? selected.name : 'All employees'}</span>
+        <span className="truncate" style={{ color: selected ? 'var(--text)' : 'var(--text-muted)' }}>
+          {selected ? `${selected.name}${selected.role ? ` · ${selected.role}` : ''}` : allLabel}
+        </span>
         <ChevronDown size={16} style={{ color: 'var(--text-faint)', flexShrink: 0 }} />
       </button>
       {open && (
@@ -210,7 +218,9 @@ function EmployeePicker({ employees, value, onChange }: {
             </div>
           </div>
           <div style={{ maxHeight: 220, overflow: 'auto' }} className="py-1">
-            <button type="button" onClick={() => pick('')} className="w-full text-left px-3 py-2 text-[13px] hover:bg-surface-2" style={{ fontWeight: value === '' ? 700 : 400, background: value === '' ? 'var(--surface-2)' : undefined }}>All employees</button>
+            {showAll && (
+              <button type="button" onClick={() => pick('')} className="w-full text-left px-3 py-2 text-[13px] hover:bg-surface-2" style={{ fontWeight: value === '' ? 700 : 400, background: value === '' ? 'var(--surface-2)' : undefined }}>{allLabel}</button>
+            )}
             {list.map((e) => (
               <button key={e.id} type="button" onClick={() => pick(Number(e.id))} className="w-full text-left px-3 py-2 hover:bg-surface-2" style={{ background: Number(e.id) === value ? 'var(--surface-2)' : undefined }}>
                 <div className="text-[13px] font-medium">{e.name}</div>
@@ -229,12 +239,28 @@ function GenerateModal({ employees, onClose, onSaved }: {
   employees: Employee[]; onClose: () => void; onSaved: () => void;
 }) {
   const now = new Date();
-  const [employeeId, setEmployeeId] = useState<number | ''>(employees[0]?.id ?? '');
+  const [employeeId, setEmployeeId] = useState<number | ''>(employees[0] ? Number(employees[0].id) : '');
+  const [role, setRole] = useState('All');
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
   const [deductions, setDeductions] = useState('');
   const [bonus, setBonus] = useState('');
   const [busy, setBusy] = useState(false);
+
+  // Narrow the list by role first, then search within it. Picking a role that
+  // no longer holds the chosen employee clears the choice rather than leaving
+  // an invisible selection behind.
+  const roles = useMemo(
+    () => Array.from(new Set(employees.map((e) => e.role).filter(Boolean))) as string[],
+    [employees],
+  );
+  const shortlist = useMemo(
+    () => (role === 'All' ? employees : employees.filter((e) => e.role === role)),
+    [employees, role],
+  );
+  useEffect(() => {
+    if (employeeId !== '' && !shortlist.some((e) => Number(e.id) === employeeId)) setEmployeeId('');
+  }, [shortlist, employeeId]);
 
   const save = async () => {
     if (!employeeId) return;
@@ -260,11 +286,21 @@ function GenerateModal({ employees, onClose, onSaved }: {
         Pulls the employee's attendance hours for the month: regular hours × hourly rate, overtime (beyond the daily limit) × OT rate, plus basic salary and bonus, minus deductions.
       </div>
       <div className="grid grid-cols-2 gap-4">
-        <Field label="Employee" req full>
-          <Select value={String(employeeId)} onChange={(e) => setEmployeeId(Number(e.target.value))}>
-            {employees.length === 0 && <option value="">No active employees</option>}
-            {employees.map((e) => <option key={e.id} value={e.id}>{e.name}{e.role ? ` · ${e.role}` : ''}</option>)}
+        <Field label="Role">
+          <Select value={role} onChange={(e) => setRole(e.target.value)}>
+            <option value="All">All roles</option>
+            {roles.map((r) => <option key={r} value={r}>{r}</option>)}
           </Select>
+        </Field>
+        <Field label="Employee" req hint={`${shortlist.length} ${shortlist.length === 1 ? 'employee' : 'employees'}`}>
+          <EmployeePicker
+            employees={shortlist}
+            value={employeeId}
+            onChange={setEmployeeId}
+            allLabel={shortlist.length === 0 ? 'No active employees' : 'Select an employee'}
+            showAll={false}
+            width="100%"
+          />
         </Field>
         <Field label="Month">
           <Select value={String(month)} onChange={(e) => setMonth(Number(e.target.value))}>

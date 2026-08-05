@@ -30,8 +30,8 @@ export default function LoginPage() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const company = settings.company ?? 'Kadurata Kuda';
-  const logo = settings.logo ?? 'KK';
+  const company = settings.company ?? 'DIAMOND';
+  const logo = settings.logo ?? 'DM';
   const year = new Date().getFullYear();
   const valid = username.trim().length > 0 && pw.trim().length > 0;
 
