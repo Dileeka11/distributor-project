@@ -11,8 +11,8 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Unified stock-movement report: every transaction that changes stock —
- * opening stock, GRN receipts (in), invoice sales (out) and manual
- * adjustments — read straight from their source tables so it always
+ * opening stock, GRN receipts (in), invoice sales (out), product assembly
+ * runs and manual adjustments — read straight from their source tables so it always
  * reconciles (total in − total out == current stock). Filter by item and
  * a from/to date range.
  */
@@ -40,11 +40,15 @@ class StockTransactionController extends Controller
             'invoice_lines.item_id', 'invoice_lines.qty');
         $adjNet = $sumBy(DB::table('stock_adjustments')->when($itemId, fn ($q) => $q->where('item_id', $itemId)),
             'stock_adjustments.item_id', 'stock_adjustments.qty');
+        // Signed already: + for the units built, − for each component consumed.
+        $prodNet = $sumBy(DB::table('product_runs')->when($itemId, fn ($q) => $q->where('item_id', $itemId)),
+            'product_runs.item_id', 'product_runs.qty');
 
         Item::query()->when($itemId, fn ($q) => $q->whereKey($itemId))
             ->get(['id', 'code', 'name', 'stock', 'created_at'])
-            ->each(function (Item $it) use (&$rows, $grnIn, $invOut, $adjNet, $inRange) {
-                $recorded = (int) ($grnIn[$it->id] ?? 0) - (int) ($invOut[$it->id] ?? 0) + (int) ($adjNet[$it->id] ?? 0);
+            ->each(function (Item $it) use (&$rows, $grnIn, $invOut, $adjNet, $prodNet, $inRange) {
+                $recorded = (int) ($grnIn[$it->id] ?? 0) - (int) ($invOut[$it->id] ?? 0)
+                    + (int) ($adjNet[$it->id] ?? 0) + (int) ($prodNet[$it->id] ?? 0);
                 $opening = (int) $it->stock - $recorded;
                 $d = optional($it->created_at)->toDateString();
                 if ($opening > 0 && $inRange($d)) {
@@ -93,6 +97,24 @@ class StockTransactionController extends Controller
                 $rows[] = $this->row($d, $a->created_at, $a, $src, $a->grn_id ?: null, $q > 0 ? $q : 0, $q < 0 ? -$q : 0, $a->remark, null, (int) $a->adjustment_id);
             });
 
+        // e) Product assembly runs: components consumed (out) and the units
+        // built (in). The product they belong to rides along on every row.
+        DB::table('product_runs')
+            ->join('items', 'items.id', '=', 'product_runs.item_id')
+            ->join('products', 'products.id', '=', 'product_runs.product_id')
+            ->join('items as product_items', 'product_items.id', '=', 'products.item_id')
+            ->when($itemId, fn ($q) => $q->where('product_runs.item_id', $itemId))
+            ->when($from, fn ($q) => $q->whereDate('product_runs.created_at', '>=', $from))
+            ->when($to, fn ($q) => $q->whereDate('product_runs.created_at', '<=', $to))
+            ->get(['product_runs.created_at', 'product_runs.qty', 'product_runs.remark', 'product_runs.product_id',
+                'product_items.code as product_code', 'items.id as item_id', 'items.code', 'items.name'])
+            ->each(function ($p) use (&$rows) {
+                $q = (int) $p->qty;
+                $d = substr((string) $p->created_at, 0, 10);
+                $rows[] = $this->row($d, $p->created_at, $p, (string) $p->product_code, null,
+                    $q > 0 ? $q : 0, $q < 0 ? -$q : 0, $p->remark, null, null, (int) $p->product_id);
+            });
+
         // Oldest first, then by created_at.
         usort($rows, fn ($a, $b) => [$a['date'], $a['created_at']] <=> [$b['date'], $b['created_at']]);
 
@@ -105,7 +127,7 @@ class StockTransactionController extends Controller
         ]);
     }
 
-    private function row($date, $createdAt, $it, string $source, $grnId, int $in, int $out, ?string $remark, ?int $batchId = null, ?int $adjustmentId = null): array
+    private function row($date, $createdAt, $it, string $source, $grnId, int $in, int $out, ?string $remark, ?int $batchId = null, ?int $adjustmentId = null, ?int $productId = null): array
     {
         return [
             'date' => $date ? substr((string) $date, 0, 10) : null,
@@ -119,6 +141,8 @@ class StockTransactionController extends Controller
             'qty_out' => $out,
             'remark' => $remark,
             'adjustment_id' => $adjustmentId,
+            // Set on product assembly rows; null everywhere else.
+            'product_id' => $productId,
         ];
     }
 }

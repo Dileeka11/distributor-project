@@ -69,6 +69,19 @@ export default function ReportsPage() {
     return m;
   }, [grns]);
 
+  // Cheque value recorded on each bill — a cash bill paid by cheque must not
+  // land in the Cash total as well as its own Cheque row.
+  const invChequeTotal = useMemo(() => {
+    const m = new Map<number, number>();
+    for (const c of cheques) m.set(Number(c.invoice_id), (m.get(Number(c.invoice_id)) ?? 0) + Number(c.amount));
+    return m;
+  }, [cheques]);
+  const grnChequeTotal = useMemo(() => {
+    const m = new Map<number, number>();
+    for (const c of grnCheques) m.set(Number(c.grn_id), (m.get(Number(c.grn_id)) ?? 0) + Number(c.amount));
+    return m;
+  }, [grnCheques]);
+
   const report = useMemo(() => {
     if (!applied) return null;
     const isCust = applied.side === 'customer';
@@ -86,9 +99,12 @@ export default function ReportsPage() {
 
     const rows: ReportRow[] = [];
 
-    // Settlements (receipts / payments) by payment mode.
+    // Settlements (receipts / payments) by payment mode. A cheque receipt only
+    // counts once every cheque on it has passed — until then the backend has
+    // not applied it to the party's balance either, so it is not money yet.
     settlements
-      .filter((s) => s.side === sideKey && inRange(String(s.date)) && partyOk(s.customer_id, s.supplier_id))
+      .filter((s) => s.side === sideKey && inRange(String(s.date)) && partyOk(s.customer_id, s.supplier_id)
+        && (s.mode !== 'Cheque' || s.passed === true))
       .forEach((s) => rows.push({
         id: `set-${s.id}`,
         date: String(s.date).slice(0, 10),
@@ -120,6 +136,20 @@ export default function ReportsPage() {
             mode: 'Advance', chequeNo: null, chequeDate: null, qty: null, grnId: null, amount: advance,
           });
         });
+
+      // A cash invoice is settled over the counter, so no receipt is ever
+      // written for it — the money still came in and belongs in the totals.
+      // Whatever was handed over as a cheque on the bill is left out; that
+      // shows as its own Cheque row when it clears.
+      invoices
+        .filter((i) => i.type === 'cash' && inRange(String(i.date)) && partyOk(i.customer_id, null) && !i.cancelled_at)
+        .forEach((i) => {
+          const cash = Number(i.paid) - (invChequeTotal.get(Number(i.id)) ?? 0);
+          if (cash > 0) rows.push({
+            id: `cash-inv-${i.id}`, date: String(i.date).slice(0, 10), ref: i.no, party: i.customer?.name ?? '—',
+            mode: 'Cash', chequeNo: null, chequeDate: null, qty: null, grnId: null, amount: cash,
+          });
+        });
     } else {
       grnCheques
         .filter((c) => c.cleared && inRange(c.cheque_date) && partyOk(null, c.supplier_id))
@@ -135,6 +165,17 @@ export default function ReportsPage() {
           if (advance > 0) rows.push({
             id: `adv-grn-${g.id}`, date: String(g.date).slice(0, 10), ref: g.no, party: g.supplier?.name ?? '—',
             mode: 'Advance', chequeNo: null, chequeDate: null, qty: grnQty.get(g.id) ?? null, grnId: g.id, amount: advance,
+          });
+        });
+
+      // Cash purchases are paid on the spot — same as cash invoices above.
+      grns
+        .filter((g) => g.type === 'cash' && inRange(String(g.date)) && partyOk(null, g.supplier_id) && !g.cancelled_at)
+        .forEach((g) => {
+          const cash = Number(g.paid) - (grnChequeTotal.get(Number(g.id)) ?? 0);
+          if (cash > 0) rows.push({
+            id: `cash-grn-${g.id}`, date: String(g.date).slice(0, 10), ref: g.no, party: g.supplier?.name ?? '—',
+            mode: 'Cash', chequeNo: null, chequeDate: null, qty: grnQty.get(g.id) ?? null, grnId: g.id, amount: cash,
           });
         });
     }
@@ -155,7 +196,15 @@ export default function ReportsPage() {
       : (isCust ? Number((p as Customer).credit_limit) + Number((p as Customer).balance) : Number((p as Supplier).payable));
     const outstanding = applied.partyId === ''
       ? (isCust ? receivables : payables).reduce((s, p) => s + outFor(p), 0)
-      : outFor((isCust ? receivables : payables).find((x) => x.id === applied.partyId));
+      : outFor((isCust ? receivables : payables).find((x) => Number(x.id) === applied.partyId));
+
+    // The credit balance typed in when the customer was added — an opening due
+    // that belongs to no invoice. It is already inside `outstanding`; shown on
+    // its own so the balance due adds up on screen.
+    const openFor = (p?: Customer) => !p ? 0 : Number(p.credit_limit);
+    const openingDue = !isCust ? 0 : (applied.partyId === ''
+      ? receivables.reduce((s, p) => s + openFor(p), 0)
+      : openFor(receivables.find((x) => Number(x.id) === applied.partyId)));
 
     const partyName = applied.partyId === ''
       ? `All ${isCust ? 'customers' : 'suppliers'}`
@@ -186,8 +235,8 @@ export default function ReportsPage() {
     const txnTotal = txns.reduce((s, t) => s + t.total, 0);
     const txnPaid = txns.reduce((s, t) => s + t.paid, 0);
 
-    return { rows, byMode, total, totalQty, outstanding, isCust, partyName, txns, txnTotal, txnPaid };
-  }, [applied, settlements, cheques, grnCheques, grns, invoices, grnQty, receivables, payables, parties]);
+    return { rows, byMode, total, totalQty, outstanding, openingDue, isCust, partyName, txns, txnTotal, txnPaid };
+  }, [applied, settlements, cheques, grnCheques, grns, invoices, grnQty, invChequeTotal, grnChequeTotal, receivables, payables, parties]);
 
   const periodLabel = applied
     ? (applied.from || applied.to ? `${applied.from ? prettyDate(applied.from) : '…'} → ${applied.to ? prettyDate(applied.to) : '…'}` : 'All dates')
@@ -245,7 +294,8 @@ export default function ReportsPage() {
         <td class="r">Rs ${fmt(report.txnTotal)}</td>
         <td class="r">Rs ${fmt(report.txnPaid)}</td>
         <td class="r">Rs ${fmt(report.txnTotal - report.txnPaid)}</td></tr></tfoot></table>
-      <div class="out">Current outstanding ${report.isCust ? 'receivable' : 'payable'}: <b>Rs ${fmt(report.outstanding)}</b></div>
+      ${report.isCust ? `<div class="out">Opening credit balance (entered when the customer was added): Rs ${fmt(report.openingDue)}</div>` : ''}
+      <div class="out">Balance due ${report.isCust ? 'receivable' : 'payable'}: <b>Rs ${fmt(report.outstanding)}</b></div>
       </body></html>`);
     w.document.close();
     w.focus();
@@ -417,8 +467,16 @@ export default function ReportsPage() {
                     <div className="mono text-[18px] font-extrabold">{report.totalQty || '—'}</div>
                   </div>
                 )}
+                {report.isCust && (
+                  <div>
+                    <div className="text-[11.5px]" style={{ color: 'var(--text-muted)' }}>Opening credit balance</div>
+                    <div className="mono text-[18px] font-extrabold">Rs {fmt(report.openingDue)}</div>
+                  </div>
+                )}
                 <div>
-                  <div className="text-[11.5px]" style={{ color: 'var(--text-muted)' }}>Outstanding {report.isCust ? 'receivable' : 'payable'}</div>
+                  <div className="text-[11.5px]" style={{ color: 'var(--text-muted)' }}>
+                    Balance due ({report.isCust ? 'receivable' : 'payable'})
+                  </div>
                   <div className="mono text-[18px] font-extrabold" style={{ color: 'var(--red)' }}>Rs {fmt(report.outstanding)}</div>
                 </div>
               </div>

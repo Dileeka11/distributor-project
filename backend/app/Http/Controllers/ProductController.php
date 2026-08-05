@@ -6,6 +6,7 @@ use App\Models\Category;
 use App\Models\Item;
 use App\Models\ItemBatch;
 use App\Models\Product;
+use App\Models\ProductRun;
 use App\Services\NumberService;
 use App\Services\StockService;
 use Illuminate\Http\JsonResponse;
@@ -97,7 +98,9 @@ class ProductController extends Controller
                 ]);
                 // The run consumes exactly what was entered.
                 $this->consume($c);
+                $this->logRun($product, $c, $units);
             }
+            $this->logBuild($product, (int) $item->id, $units);
 
             // Project the components + the new product item into the stock ledger.
             $ids = array_map(fn ($c) => (int) $c['item']->id, $components);
@@ -162,8 +165,10 @@ class ProductController extends Controller
 
             foreach ($components as $c) {
                 $this->consume($c);
+                $this->logRun($product, $c, $units);
             }
             Item::query()->whereKey($product->item_id)->increment('stock', $units);
+            $this->logBuild($product, (int) $product->item_id, $units);
 
             $ids = array_map(fn ($c) => (int) $c['item']->id, $components);
             $ids[] = (int) $product->item_id;
@@ -265,6 +270,32 @@ class ProductController extends Controller
         }
 
         return $out;
+    }
+
+    /** Ledger row for a component taken off the shelf by a run (stock out). */
+    private function logRun(Product $product, array $c, int $units): void
+    {
+        $this->writeRun($product, (int) $c['item']->id, -(int) $c['need'], $units,
+            $c['batch'] ? (int) $c['batch']->id : null, "Used for {$units} unit(s)");
+    }
+
+    /** Ledger row for the units the run produced (stock in). */
+    private function logBuild(Product $product, int $itemId, int $units): void
+    {
+        $this->writeRun($product, $itemId, $units, $units, null, "Assembled {$units} unit(s)");
+    }
+
+    private function writeRun(Product $product, int $itemId, int $qty, int $units, ?int $batchId, string $remark): void
+    {
+        ProductRun::query()->create([
+            'product_id' => (int) $product->id,
+            'item_id' => $itemId,
+            'batch_id' => $batchId,
+            'qty' => $qty,
+            'units' => $units,
+            'remark' => $remark,
+            'created_by' => optional(request()->user())->id,
+        ]);
     }
 
     /** Deduct one component's stock (and its cost-batch) for an assembly run. */

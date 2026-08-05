@@ -97,9 +97,18 @@ class StockService
             ->selectRaw('batch_id AS b, SUM(qty) AS q')
             ->pluck('q', 'b');
 
+        // Components taken from a lot to assemble a product are a genuine
+        // withdrawal too (qty is negative), so the lot is not short by drift.
+        $built = DB::table('product_runs')
+            ->whereIn('batch_id', $ids)
+            ->groupBy('batch_id')
+            ->selectRaw('batch_id AS b, SUM(qty) AS q')
+            ->pluck('q', 'b');
+
         $held = (int) $batches->sum('qty_remaining');
         foreach ($batches as $b) {
-            $expected = max(0, (int) $b->qty_in - (int) ($sold[$b->id] ?? 0) + (int) ($adjusted[$b->id] ?? 0));
+            $expected = max(0, (int) $b->qty_in - (int) ($sold[$b->id] ?? 0)
+                + (int) ($adjusted[$b->id] ?? 0) + (int) ($built[$b->id] ?? 0));
             $delta = $expected - (int) $b->qty_remaining;
             if ($delta > 0) {
                 // Only ever reclaim what is actually sitting loose in opening.

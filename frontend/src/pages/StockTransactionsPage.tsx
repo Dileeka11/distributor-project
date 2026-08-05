@@ -16,6 +16,8 @@ interface TxnRow {
   date: string | null; created_at: string; item_id: number; item_code: string; item_name: string;
   source: string; grn_id: number | null; qty_in: number; qty_out: number; remark: string | null;
   adjustment_id: number | null;
+  /** Set on product assembly rows — the product that was built. */
+  product_id: number | null;
 }
 interface TxnResp { data: TxnRow[]; totals: { in: number; out: number; net: number }; }
 
@@ -84,7 +86,7 @@ export default function StockTransactionsPage() {
     <div className="fade-in">
       <PageHead
         title="Stock Transaction Report"
-        sub="Every stock movement — opening, GRN receipts, invoice sales and adjustments."
+        sub="Every stock movement — opening, GRN receipts, invoice sales, product builds and adjustments."
         actions={<Button variant="subtle" icon={<Printer size={16} />} onClick={printReport}>Print / PDF</Button>}
       />
 
