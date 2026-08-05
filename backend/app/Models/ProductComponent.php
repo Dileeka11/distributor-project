@@ -12,7 +12,9 @@ class ProductComponent extends Model
     protected $casts = [
         'product_id' => 'integer',
         'item_id' => 'integer',
-        'qty' => 'integer',
+        // Per one unit of the product, and fractional when a run's total does
+        // not divide evenly by the units made.
+        'qty' => 'decimal:3',
         'price' => 'decimal:2',
         'total' => 'decimal:2',
     ];

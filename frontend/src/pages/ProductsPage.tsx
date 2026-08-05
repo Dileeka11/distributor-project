@@ -161,6 +161,19 @@ function ProductBuilder({ onClose, onSaved }: { onClose: () => void; onSaved: ()
     const b = batchesFor(l).find((x) => Number(x.id) === v);
     setLine(i, { batch_id: v, price: b ? Number(b.unit_cost).toFixed(2) : '0' });
   };
+  /** Units of this row's exact item + cost lot already claimed by other rows. */
+  const takenElsewhere = (l: DraftLine, exceptIdx: number) =>
+    l.item_id === '' ? 0 : lines.reduce(
+      (s, x, idx) => s + (idx !== exceptIdx && x.item_id === l.item_id && x.batch_id === l.batch_id
+        ? (Number(x.qty) || 0)
+        : 0),
+      0,
+    );
+
+  /** A cost lot another row already took for this same item. */
+  const lotTaken = (l: DraftLine, exceptIdx: number, batchId: number) =>
+    lines.some((x, idx) => idx !== exceptIdx && x.item_id === l.item_id && x.batch_id === batchId);
+
   const addLine = () => setLines((ls) => [...ls, blankLine()]);
   const delLine = (i: number) => setLines((ls) => (ls.length > 1 ? ls.filter((_, idx) => idx !== i) : ls));
 
@@ -168,14 +181,16 @@ function ProductBuilder({ onClose, onSaved }: { onClose: () => void; onSaved: ()
   // A line with cost-batches must have one selected (same rule as invoices).
   const validLines = lines.filter((l) => l.item_id !== '' && Number(l.qty) > 0 && (batchesFor(l).length === 0 || l.batch_id !== ''));
   // Actual price is the component total for ONE unit of the product.
-  const actual = validLines.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.price) || 0), 0);
+  // Entered quantities are the whole run, so one unit costs the run spread out.
+  const runCost = validLines.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.price) || 0), 0);
+  const actual = runCost / unitsN;
   const sellingN = Number(selling) || 0;
   const shortages = validLines.filter((l) => {
     const it = itemFor(l);
     if (!it) return false;
     const batch = batchFor(l);
     const have = batch ? Number(batch.qty_remaining) : Number(it.stock);
-    return Number(l.qty) * unitsN > have;
+    return Number(l.qty) > have;
   });
   const canSave = name.trim() !== '' && validLines.length > 0 && sellingN > 0 && shortages.length === 0 && !busy;
 
@@ -227,7 +242,7 @@ function ProductBuilder({ onClose, onSaved }: { onClose: () => void; onSaved: ()
         </Field>
       </div>
 
-      <div className="text-[13px] font-semibold mb-2" style={{ color: 'var(--text-muted)' }}>Component items (per one unit)</div>
+      <div className="text-[13px] font-semibold mb-2" style={{ color: 'var(--text-muted)' }}>Component items <span className="font-medium" style={{ color: 'var(--text-faint)' }}>· the whole quantity used for all {fmt0(unitsN)} unit{unitsN === 1 ? '' : 's'}</span></div>
       <div className="card p-2.5 mb-4">
         <table className="w-full border-collapse">
           <thead>
@@ -243,14 +258,17 @@ function ProductBuilder({ onClose, onSaved }: { onClose: () => void; onSaved: ()
           <tbody>
             {lines.map((l, i) => {
               const it = itemFor(l);
-              const used = lines.filter((_, idx) => idx !== i).map((x) => x.item_id);
-              const need = (Number(l.qty) || 0) * unitsN;
+              const need = Number(l.qty) || 0;
               const batch = batchFor(l);
-              const have = l.batch_id === 0
+              const pool = l.batch_id === 0
                 ? (it ? looseFor(it) : 0)
                 : batch
                   ? Number(batch.qty_remaining)
                   : Number(it?.stock ?? 0);
+              // The same item can appear on more than one row, taken from a
+              // different cost lot each time — so what is left for this row is
+              // its lot less whatever the other rows already draw from it.
+              const have = pool - takenElsewhere(l, i);
               const short = it ? need > have : false;
               return (
                 <tr key={i} className="border-t border-border">
@@ -258,7 +276,7 @@ function ProductBuilder({ onClose, onSaved }: { onClose: () => void; onSaved: ()
                     <Select value={l.item_id === '' ? '' : String(l.item_id)} onChange={(e) => pickItem(i, e.target.value ? Number(e.target.value) : '')} style={{ height: 36, fontSize: 13 }}>
                       <option value="">Select item…</option>
                       {items.map((x) => (
-                        <option key={x.id} value={String(Number(x.id))} disabled={Number(x.stock) <= 0 || used.includes(Number(x.id))}>
+                        <option key={x.id} value={String(Number(x.id))} disabled={Number(x.stock) <= 0}>
                           {x.code} · {x.name}{Number(x.stock) <= 0 ? ' (out)' : ''}
                         </option>
                       ))}
@@ -267,7 +285,7 @@ function ProductBuilder({ onClose, onSaved }: { onClose: () => void; onSaved: ()
                       <div className="text-[12px] mt-1" style={{ color: short ? 'var(--red)' : 'var(--text-muted)' }}>
                         Stock: {fmt0(Number(it.stock))} · RP Rs {fmt(Number(it.retail_price))}
                         {l.batch_id === 0 ? ` · old stock ${fmt0(looseFor(it))} left` : batch ? ` · batch ${fmt0(Number(batch.qty_remaining))} left` : ''}
-                        {short ? ` — need ${fmt0(need)} for ${fmt0(unitsN)} units` : ''}
+                        {short ? ` — need ${fmt0(need)}, only ${fmt0(Math.max(0, have))} available` : ''}
                       </div>
                     )}
                   </td>
@@ -286,11 +304,15 @@ function ProductBuilder({ onClose, onSaved }: { onClose: () => void; onSaved: ()
                             : 'Select cost…'}
                       </option>
                       {it && looseFor(it) > 0 && (
-                        <option value="0">Rs {fmt(oldStockPrice(it))} · old stock · {fmt0(looseFor(it))} left</option>
+                        <option value="0" disabled={lotTaken(l, i, 0)}>
+                          Rs {fmt(oldStockPrice(it))} · old stock · {fmt0(looseFor(it))} left
+                          {lotTaken(l, i, 0) ? ' (already used)' : ''}
+                        </option>
                       )}
                       {batchesFor(l).map((b) => (
-                        <option key={b.id} value={String(Number(b.id))}>
+                        <option key={b.id} value={String(Number(b.id))} disabled={lotTaken(l, i, Number(b.id))}>
                           Rs {fmt(Number(b.unit_cost))} · GRN lot · {fmt0(Number(b.qty_remaining))} left
+                          {lotTaken(l, i, Number(b.id)) ? ' (already used)' : ''}
                         </option>
                       ))}
                     </Select>

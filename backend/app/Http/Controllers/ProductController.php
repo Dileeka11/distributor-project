@@ -41,23 +41,27 @@ class ProductController extends Controller
             'selling_price' => ['required', 'numeric', 'min:0'],
             'units' => ['required', 'integer', 'min:1'],
             'lines' => ['required', 'array', 'min:1'],
-            'lines.*.item_id' => ['required', 'distinct', 'exists:items,id'],
+            // The same item may appear more than once, taken from a different
+            // cost lot each time, so the item alone is not required to be unique.
+            'lines.*.item_id' => ['required', 'exists:items,id'],
             // Which GRN cost-batch the components are taken from (like invoices).
             'lines.*.batch_id' => ['nullable', 'exists:item_batches,id'],
+            // The whole quantity consumed by this run, not a per-unit figure.
             'lines.*.qty' => ['required', 'integer', 'min:1'],
             'lines.*.price' => ['required', 'numeric', 'min:0'],
         ]);
 
         $product = DB::transaction(function () use ($data) {
             $units = (int) $data['units'];
-            $components = $this->lockComponents($data['lines'], $units);
+            $components = $this->lockComponents($data['lines'], 1);
 
-            // Actual price = component total for ONE unit of the product.
+            // Quantities arrive as the total for the run, so the cost of one
+            // unit is the run's component cost spread over the units made.
             $actual = 0.0;
             foreach ($components as $c) {
                 $actual += $c['total'];
             }
-            $actual = round($actual, 2);
+            $actual = round($actual / $units, 2);
             $selling = round((float) $data['selling_price'], 2);
 
             $categoryId = $data['category_id'] ?? null;
@@ -85,11 +89,14 @@ class ProductController extends Controller
                 $product->components()->create([
                     'item_id' => $c['item']->id,
                     'name' => $c['item']->name,
-                    'qty' => $c['qty'],
+                    // Kept per one unit, so assembling more later reads straight
+                    // off the recipe.
+                    'qty' => round($c['qty'] / $units, 3),
                     'price' => $c['price'],
-                    'total' => $c['total'],
+                    'total' => round($c['total'] / $units, 2),
                 ]);
-                $this->consume($c, $units);
+                // The run consumes exactly what was entered.
+                $this->consume($c);
             }
 
             // Project the components + the new product item into the stock ledger.
@@ -136,7 +143,7 @@ class ProductController extends Controller
             $components = $this->lockComponents($lines, $units);
 
             foreach ($components as $c) {
-                $this->consume($c, $units);
+                $this->consume($c);
             }
             Item::query()->whereKey($product->item_id)->increment('stock', $units);
 
@@ -195,7 +202,16 @@ class ProductController extends Controller
      * stock exists to assemble the requested units.
      * Returns [{item, batch|null, qty, price, total(per unit)}].
      */
-    private function lockComponents(array $lines, int $units): array
+    /**
+     * Lock the component items and work out what each line consumes.
+     *
+     * `$multiplier` is how many times the line's quantity is taken: creating a
+     * product sends the run's whole quantities and so multiplies by one, while
+     * assembling more reads the per-unit recipe and multiplies by the units.
+     * A per-unit recipe can be fractional, so the need is rounded up — half an
+     * item cannot come off the shelf.
+     */
+    private function lockComponents(array $lines, float $multiplier): array
     {
         $ids = array_map(fn ($l) => $l['item_id'], $lines);
         $items = Item::query()->whereIn('id', $ids)->lockForUpdate()->get()->keyBy('id');
@@ -206,9 +222,9 @@ class ProductController extends Controller
         foreach ($lines as $line) {
             /** @var Item $item */
             $item = $items[$line['item_id']];
-            $qty = (int) $line['qty'];
+            $qty = (float) $line['qty'];
             $price = (float) $line['price'];
-            $need = $qty * $units;
+            $need = (int) ceil(round($qty * $multiplier, 3));
             $batchId = $line['batch_id'] ?? null;
             $batch = null;
 
@@ -224,6 +240,7 @@ class ProductController extends Controller
                 'item' => $item,
                 'batch' => $batch,
                 'qty' => $qty,
+                'need' => $need,   // whole items actually coming off the shelf
                 'price' => $price,
                 'total' => round($qty * $price, 2),
             ];
@@ -233,11 +250,11 @@ class ProductController extends Controller
     }
 
     /** Deduct one component's stock (and its cost-batch) for an assembly run. */
-    private function consume(array $c, int $units): void
+    private function consume(array $c): void
     {
-        $c['item']->decrement('stock', $c['qty'] * $units);
+        $c['item']->decrement('stock', $c['need']);
         if ($c['batch']) {
-            $c['batch']->decrement('qty_remaining', $c['qty'] * $units);
+            $c['batch']->decrement('qty_remaining', $c['need']);
         }
     }
 }
