@@ -12,8 +12,16 @@ use Illuminate\Support\Facades\DB;
 
 class SalesReturnController extends Controller
 {
-    public function __construct(private readonly ReturnCreditService $credits)
+    /**
+     * The live server runs PHP 7.4, so no constructor property promotion.
+     *
+     * @var ReturnCreditService
+     */
+    private $credits;
+
+    public function __construct(ReturnCreditService $credits)
     {
+        $this->credits = $credits;
     }
 
     public function index(Request $request): JsonResponse

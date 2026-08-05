@@ -27,8 +27,17 @@ class InvoiceController extends Controller
         'lines.item.product:id,item_id',
     ];
 
-    public function __construct(private readonly ReturnCreditService $credits)
+    /**
+     * Declared the long way round: the live server runs PHP 7.4, where
+     * constructor property promotion is a parse error.
+     *
+     * @var ReturnCreditService
+     */
+    private $credits;
+
+    public function __construct(ReturnCreditService $credits)
     {
+        $this->credits = $credits;
     }
 
     public function index(Request $request): JsonResponse

@@ -50,7 +50,8 @@ class ReturnStockService
                     'code' => $l->item->code ?? null,
                     'name' => $l->name,
                     'return_no' => $l->salesReturn->no ?? null,
-                    'return_date' => optional($l->salesReturn)->date?->toDateString(),
+                    // `optional()` rather than `?->`, which PHP 7.4 cannot parse.
+                    'return_date' => optional(optional($l->salesReturn)->date)->toDateString(),
                     'customer' => $l->salesReturn->customer->name ?? null,
                     'returned_qty' => (int) $l->qty,
                     'sent_qty' => (int) ($l->sent ?? 0),
