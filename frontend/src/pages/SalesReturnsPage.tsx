@@ -94,11 +94,20 @@ export default function SalesReturnsPage() {
             })}
           </tbody>
         </table>
-        {rows.length === 0 && <Empty title="No sales returns yet" sub="Take goods back off an invoice with New Return." />}
+        {rows.length === 0 && (
+          <Empty
+            icon={<Undo2 size={40} />}
+            title="No sales returns yet"
+            sub="Take goods back off an invoice with New Return."
+          />
+        )}
         {rows.length > 0 && (
           <Pagination
-            page={page} perPage={perPage} total={rows.length}
-            onPage={setPage} onPerPage={(n) => { setPerPage(n); setPage(1); }}
+            totalItems={rows.length}
+            currentPage={page}
+            itemsPerPage={perPage}
+            onPageChange={setPage}
+            onItemsPerPageChange={(n) => { setPerPage(n); setPage(1); }}
           />
         )}
       </div>
@@ -149,7 +158,7 @@ function CreateReturn({ onClose, onSaved }: { onClose: () => void; onSaved: () =
   }, [invoiceId]);
 
   const setDraft = (id: number, patch: Partial<Draft>) =>
-    setDrafts((d) => ({ ...d, [id]: { qty: '', ...d[id], ...patch } }));
+    setDrafts((d) => ({ ...d, [id]: { ...(d[id] ?? { qty: '' }), ...patch } }));
 
   const lineValue = (l: ReturnableLine) => {
     const qty = Number(drafts[Number(l.invoice_line_id)]?.qty) || 0;
@@ -306,7 +315,11 @@ function CreateReturn({ onClose, onSaved }: { onClose: () => void; onSaved: () =
       )}
 
       {!detail && (
-        <Empty title="Pick a customer and invoice" sub="The items on that invoice appear here, priced the way they were billed." />
+        <Empty
+          icon={<Undo2 size={40} />}
+          title="Pick a customer and invoice"
+          sub="The items on that invoice appear here, priced the way they were billed."
+        />
       )}
     </Modal>
   );
