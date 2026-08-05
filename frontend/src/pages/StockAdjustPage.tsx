@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { SlidersHorizontal, Plus, Minus, Package, Layers, FolderOpen } from 'lucide-react';
 import { http, apiErrorMessage } from '@/lib/http';
 import { fmt, fmt0, prettyDate } from '@/lib/format';
@@ -6,7 +6,7 @@ import { toast } from '@/lib/toast';
 import { PageHead } from '@/components/PageHead';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
-import { Empty } from '@/components/ui/Common';
+import { Empty, Pagination } from '@/components/ui/Common';
 import { Modal } from '@/components/ui/Modal';
 import { Field, Input, Select, Textarea } from '@/components/ui/Field';
 import { Segmented } from '@/components/ui/Common';
@@ -28,6 +28,8 @@ export default function StockAdjustPage() {
   const [itemId, setItemId] = useState<number | ''>('');
   const [data, setData] = useState<LotsResponse | null>(null);
   const [adjust, setAdjust] = useState<Lot | null>(null);
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(25);
   const [pickerOpen, setPickerOpen] = useState(false);
 
   useEffect(() => { void http.get('/api/categories').then((r) => setCats(r.data.data)); }, []);
@@ -38,6 +40,10 @@ export default function StockAdjustPage() {
 
   const loadLots = (id: number) => http.get(`/api/stock-adjustments/lots/${id}`).then((r) => setData(r.data));
   useEffect(() => { if (itemId !== '') void loadLots(Number(itemId)); else setData(null); }, [itemId]);
+  useEffect(() => { setPage(1); }, [itemId, catFilter]);
+
+  const lots = data?.lots ?? [];
+  const paginatedLots = useMemo(() => lots.slice((page - 1) * perPage, page * perPage), [lots, page, perPage]);
 
   return (
     <div className="fade-in">
@@ -69,7 +75,7 @@ export default function StockAdjustPage() {
           <table className="tbl">
             <thead><tr><th>Source lot</th><th>Date</th><th className="num">Unit cost / price</th><th className="num">Qty in lot</th><th></th></tr></thead>
             <tbody>
-              {data.lots.map((l) => (
+              {paginatedLots.map((l) => (
                 <tr key={l.batch_id ?? 'opening'}>
                   <td>
                     {l.grn_id === 0
@@ -86,6 +92,15 @@ export default function StockAdjustPage() {
               ))}
             </tbody>
           </table>
+          {lots.length > 0 && (
+            <Pagination
+              totalItems={lots.length}
+              currentPage={page}
+              itemsPerPage={perPage}
+              onPageChange={setPage}
+              onItemsPerPageChange={setPerPage}
+            />
+          )}
         </div>
       )}
 

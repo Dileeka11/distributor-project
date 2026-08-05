@@ -6,7 +6,7 @@ import { toast, confirmDelete } from '@/lib/toast';
 import { PageHead } from '@/components/PageHead';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
-import { Segmented, Stat, Empty, Avatar } from '@/components/ui/Common';
+import { Segmented, Stat, Empty, Avatar, Pagination } from '@/components/ui/Common';
 import { Modal } from '@/components/ui/Modal';
 import { Field, Select, MoneyInput, Input } from '@/components/ui/Field';
 import { SearchSelect } from '@/components/ui/SearchSelect';
@@ -46,6 +46,10 @@ export default function OutstandingPage() {
   const [partyFilter, setPartyFilter] = useState<number | ''>('');
   const [target, setTarget] = useState<{ side: Tab; rec: Customer | Supplier } | null>(null);
   const [chequeReport, setChequeReport] = useState<Tab | null>(null);
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(25);
+  const [histPage, setHistPage] = useState(1);
+  const [histPerPage, setHistPerPage] = useState(25);
   const [editTarget, setEditTarget] = useState<{ side: Tab; rec: Customer | Supplier; settlement: Settlement; outstanding: number } | null>(null);
 
   const load = async () => {
@@ -134,6 +138,10 @@ export default function OutstandingPage() {
     ...chequeHist.map((c) => ({ kind: 'cheque' as const, date: c.date ?? '', c })),
   ].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
+  const pagedRows = rows.slice((page - 1) * perPage, page * perPage);
+  const pagedHist = histItems.slice((histPage - 1) * histPerPage, histPage * histPerPage);
+  useEffect(() => { setPage(1); setHistPage(1); }, [tab, partyFilter]);
+
   // Reopen the Collect/Pay modal pre-filled. The party's available outstanding is
   // its current outstanding plus whatever this settlement already posted (since
   // editing reverses the old settlement before re-applying).
@@ -206,7 +214,7 @@ export default function OutstandingPage() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => {
+            {pagedRows.map((r) => {
               const isRec = tab === 'receivable';
               const cust = r as Customer;
               const paid = isRec ? Number(cust.paid_total ?? 0) + Number(cust.opening_collected ?? 0) : 0;
@@ -252,6 +260,15 @@ export default function OutstandingPage() {
         </table>
         </div>
         {rows.length === 0 && <Empty icon={<Check size={40} />} title="All settled" sub={`No outstanding ${tab === 'receivable' ? 'receivables' : 'payables'}.`} />}
+        {rows.length > 0 && (
+          <Pagination
+            totalItems={rows.length}
+            currentPage={page}
+            itemsPerPage={perPage}
+            onPageChange={setPage}
+            onItemsPerPageChange={setPerPage}
+          />
+        )}
       </div>
 
 
@@ -264,7 +281,7 @@ export default function OutstandingPage() {
           <table className="tbl">
             <thead><tr><th>Receipt / Invoice</th><th>Date</th><th>Party</th><th>Direction</th><th>Mode</th><th className="num">Amount</th><th></th></tr></thead>
             <tbody>
-              {histItems.map((it) => it.kind === 'settlement' ? (
+              {pagedHist.map((it) => it.kind === 'settlement' ? (
                 <tr key={`s-${it.s.id}`}>
                   <td className="mono font-semibold">{it.s.code}</td>
                   <td className="text-[12px]" style={{ color: 'var(--text-muted)' }}>{prettyDate(it.s.date)}</td>
@@ -316,6 +333,15 @@ export default function OutstandingPage() {
             </tbody>
           </table>
         </div>
+        {histItems.length > 0 && (
+          <Pagination
+            totalItems={histItems.length}
+            currentPage={histPage}
+            itemsPerPage={histPerPage}
+            onPageChange={setHistPage}
+            onItemsPerPageChange={setHistPerPage}
+          />
+        )}
       </div>
 
       {chequeReport && (
@@ -367,6 +393,9 @@ function PartyChequesModal({ side, parties, txnCheques, settlementCheques, onClo
   const { settings } = useSettings();
   const [partyId, setPartyId] = useState<number | ''>('');
   const [status, setStatus] = useState<'pending' | 'passed' | 'all'>('pending');
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(25);
+  useEffect(() => { setPage(1); }, [partyId, status]);
 
   const isPayable = side === 'payable';
   const partyWord = isPayable ? 'Supplier' : 'Customer';
@@ -395,6 +424,7 @@ function PartyChequesModal({ side, parties, txnCheques, settlementCheques, onClo
 
   const total = rows.reduce((s, r) => s + r.amount, 0);
   const pendingCount = rows.filter((r) => !r.cleared).length;
+  const paged = rows.slice((page - 1) * perPage, page * perPage);
 
   // Print the filtered list — the browser dialog lets the user save as PDF.
   const printReport = () => {
@@ -471,7 +501,7 @@ function PartyChequesModal({ side, parties, txnCheques, settlementCheques, onClo
           <table className="tbl">
             <thead><tr><th>Cheque No</th><th>{partyWord}</th><th>Against</th><th>Cheque date</th><th className="num">Value</th><th className="num">{refHead}</th><th>Status</th></tr></thead>
             <tbody>
-              {rows.map((r) => (
+              {paged.map((r) => (
                 <tr key={r.key}>
                   <td className="mono font-semibold">{r.no || '—'}</td>
                   <td className="font-semibold">{r.party}</td>
@@ -489,6 +519,15 @@ function PartyChequesModal({ side, parties, txnCheques, settlementCheques, onClo
           <div className="text-center py-8 text-[13px]" style={{ color: 'var(--text-faint)' }}>
             {status === 'pending' ? `No pending cheques to ${isPayable ? 'pay' : 'receive'}.` : 'No cheques found for this filter.'}
           </div>
+        )}
+        {rows.length > 0 && (
+          <Pagination
+            totalItems={rows.length}
+            currentPage={page}
+            itemsPerPage={perPage}
+            onPageChange={setPage}
+            onItemsPerPageChange={setPerPage}
+          />
         )}
       </div>
     </Modal>

@@ -6,7 +6,7 @@ import { toast, confirmDelete } from '@/lib/toast';
 import { PageHead } from '@/components/PageHead';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
-import { Empty, Avatar } from '@/components/ui/Common';
+import { Empty, Avatar, Pagination } from '@/components/ui/Common';
 import { Modal } from '@/components/ui/Modal';
 import { Field, Input, Select } from '@/components/ui/Field';
 import { useAuth } from '@/store/auth';
@@ -40,6 +40,8 @@ export default function AttendancePage() {
   // Manual time entry: off = record at the current time; on = use the picked time.
   const [manualTime, setManualTime] = useState(false);
   const [pickedTime, setPickedTime] = useState('');
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(25);
 
   const loadEmployees = () => http.get('/api/employees').then((r) => setEmployees((r.data.data as Employee[]).filter((e) => e.active)));
   const loadRecords = () => http.get('/api/attendance', { params: { date } }).then((r) => setRecords(r.data.data));
@@ -54,6 +56,8 @@ export default function AttendancePage() {
   // Role dropdown narrows the employee list; the employee dropdown then filters to one.
   const roleEmployees = employees.filter((e) => roleFilter === 'All' || e.role === roleFilter);
   const shown = employeeId === '' ? roleEmployees : roleEmployees.filter((e) => Number(e.id) === employeeId);
+  const paginated = useMemo(() => shown.slice((page - 1) * perPage, page * perPage), [shown, page, perPage]);
+  useEffect(() => { setPage(1); }, [date, roleFilter, employeeId]);
 
   const clock = async (emp: Employee) => {
     try {
@@ -132,7 +136,7 @@ export default function AttendancePage() {
         <table className="tbl">
           <thead><tr><th>Employee</th><th>Role</th><th>Clock In</th><th>Clock Out</th><th className="num">Hours</th><th>Status</th><th></th></tr></thead>
           <tbody>
-            {shown.map((emp) => {
+            {paginated.map((emp) => {
               const rec = recFor(Number(emp.id));
               const clockedIn = !!rec?.clock_in;
               const clockedOut = !!rec?.clock_out;
@@ -172,6 +176,15 @@ export default function AttendancePage() {
           <Empty icon={<CalendarCheck size={40} />}
             title={employees.length === 0 ? 'No active employees' : 'No matching employees'}
             sub={employees.length === 0 ? 'Add employees first to record attendance.' : 'Try a different search or role.'} />
+        )}
+        {shown.length > 0 && (
+          <Pagination
+            totalItems={shown.length}
+            currentPage={page}
+            itemsPerPage={perPage}
+            onPageChange={setPage}
+            onItemsPerPageChange={setPerPage}
+          />
         )}
       </div>
 
@@ -226,6 +239,8 @@ function AttendanceReportModal({ onClose }: { onClose: () => void }) {
   const [from, setFrom] = useState(today.slice(0, 8) + '01');
   const [to, setTo] = useState(today);
   const [calMonth, setCalMonth] = useState(() => new Date());
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(25);
 
   useEffect(() => {
     void http.get('/api/employees').then((r) => setEmployees(r.data.data));
@@ -257,6 +272,12 @@ function AttendanceReportModal({ onClose }: { onClose: () => void }) {
       .sort((a, b) => String(b.date).localeCompare(String(a.date))),
     [records, from, to],
   );
+
+  const paginatedRows = useMemo(
+    () => tableRows.slice((page - 1) * perPage, page * perPage),
+    [tableRows, page, perPage],
+  );
+  useEffect(() => { setPage(1); }, [employeeId, from, to]);
 
   const totalHours = tableRows.reduce((s, r) => s + Number(r.total_hours), 0);
   const presentDays = tableRows.filter((r) => r.status !== 'absent' && r.clock_in).length;
@@ -307,7 +328,7 @@ function AttendanceReportModal({ onClose }: { onClose: () => void }) {
           <table className="tbl">
             <thead><tr><th>Date</th><th>Clock In</th><th>Clock Out</th><th className="num">Hours</th><th>Status</th></tr></thead>
             <tbody>
-              {tableRows.map((r) => (
+              {paginatedRows.map((r) => (
                 <tr key={r.id}>
                   <td className="font-medium">{prettyDate(r.date)}</td>
                   <td className="mono">{hhmm(r.clock_in)}</td>
@@ -321,6 +342,15 @@ function AttendanceReportModal({ onClose }: { onClose: () => void }) {
         </div>
         {!employeeId && <div className="text-center py-8 text-[13px]" style={{ color: 'var(--text-faint)' }}>Select an employee to view attendance.</div>}
         {employeeId && tableRows.length === 0 && <div className="text-center py-8 text-[13px]" style={{ color: 'var(--text-faint)' }}>No attendance in this date range.</div>}
+        {tableRows.length > 0 && (
+          <Pagination
+            totalItems={tableRows.length}
+            currentPage={page}
+            itemsPerPage={perPage}
+            onPageChange={setPage}
+            onItemsPerPageChange={setPerPage}
+          />
+        )}
       </div>
     </Modal>
   );
