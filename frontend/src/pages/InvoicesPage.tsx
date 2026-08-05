@@ -244,6 +244,17 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
   const batchesFor = (l: DraftLine) => (l.item_id ? batchesByItem[Number(l.item_id)] ?? [] : []);
   const batchFor = (l: DraftLine) => batchesFor(l).find((b) => Number(b.id) === l.batch_id);
 
+  /**
+   * Whether this line has a stock pool to pick from — a cost lot, old stock, or
+   * both. An item carrying only opening stock still has to be chosen from, or
+   * it would sell at full price and never pick up its old-stock discount.
+   */
+  const hasPools = (l: DraftLine) => {
+    if (l.item_id === '') return false;
+    const it = items.find((x) => Number(x.id) === l.item_id);
+    return batchesFor(l).length > 0 || (!!it && looseFor(it) > 0);
+  };
+
   const cust = customers.find((c) => Number(c.id) === customerId);
 
   useEffect(() => {
@@ -321,7 +332,7 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
   const addLine = () => setLines((ls) => [...ls, blankLine()]);
   const delLine = (i: number) => setLines((ls) => (ls.length > 1 ? ls.filter((_, idx) => idx !== i) : ls));
 
-  const validLines = lines.filter((l) => l.item_id !== '' && Number(l.qty) > 0 && (batchesFor(l).length === 0 || l.batch_id !== ''));
+  const validLines = lines.filter((l) => l.item_id !== '' && Number(l.qty) > 0 && (!hasPools(l) || l.batch_id !== ''));
   // No line (nor the running total for a repeated item) may exceed live stock.
   const overStock = lines.some((l, i) => l.item_id !== '' && Number(l.qty) > 0 && Number(l.qty) > lineCap(l, i));
   const canSave = customerId !== '' && validLines.length > 0 && !overStock && !busy;
@@ -449,7 +460,7 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
                       placeholder="Search item name or code…"
                       subtitle={(x) => `${x.code} · stock ${fmt0(Number(x.stock) - usedElsewhere(x.id, i))}`}
                     />
-                    {batchesFor(l).length > 0 && (
+                    {hasPools(l) && (
                       <Select value={l.batch_id === '' ? '' : String(l.batch_id)} onChange={(e) => {
                         const v = e.target.value === '' ? '' : Number(e.target.value);
                         // Old stock (0) sells at the item's discounted price; a GRN

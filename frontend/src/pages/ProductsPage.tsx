@@ -141,10 +141,25 @@ function ProductBuilder({ onClose, onSaved }: { onClose: () => void; onSaved: ()
     setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
   const pickItem = (i: number, id: number | '') => {
     const item = items.find((x) => Number(x.id) === id);
-    // Component price defaults to the item's retail (selling) price — editable.
-    // The GRN cost-batch below only decides which purchase lot the qty comes from.
+    // Until a cost lot is chosen the price falls back to the item's retail
+    // price; picking a lot replaces it with what that lot actually cost.
     setLine(i, { item_id: id, batch_id: '', price: item ? Number(item.retail_price).toFixed(2) : '0' });
     if (id) loadBatches(Number(id));
+  };
+
+  /**
+   * Choosing which lot the component comes out of also sets its price, so the
+   * product is costed at what the goods were bought for. Still editable after.
+   */
+  const pickBatch = (i: number, l: DraftLine, v: number | '') => {
+    const it = itemFor(l);
+    if (v === '') { setLine(i, { batch_id: '' }); return; }
+    if (v === 0) {
+      setLine(i, { batch_id: 0, price: it ? oldStockPrice(it).toFixed(2) : '0' });
+      return;
+    }
+    const b = batchesFor(l).find((x) => Number(x.id) === v);
+    setLine(i, { batch_id: v, price: b ? Number(b.unit_cost).toFixed(2) : '0' });
   };
   const addLine = () => setLines((ls) => [...ls, blankLine()]);
   const delLine = (i: number) => setLines((ls) => (ls.length > 1 ? ls.filter((_, idx) => idx !== i) : ls));
@@ -217,7 +232,8 @@ function ProductBuilder({ onClose, onSaved }: { onClose: () => void; onSaved: ()
         <table className="w-full border-collapse">
           <thead>
             <tr>
-              <th className="text-left text-[11px] uppercase tracking-wider font-bold p-2" style={{ color: 'var(--text-faint)', width: '44%' }}>Item</th>
+              <th className="text-left text-[11px] uppercase tracking-wider font-bold p-2" style={{ color: 'var(--text-faint)', width: '30%' }}>Item</th>
+              <th className="text-left text-[11px] uppercase font-bold p-2" style={{ color: 'var(--text-faint)', width: '28%' }}>Cost</th>
               <th className="text-right text-[11px] uppercase font-bold p-2" style={{ color: 'var(--text-faint)', width: 70 }}>Qty</th>
               <th className="text-right text-[11px] uppercase font-bold p-2" style={{ color: 'var(--text-faint)', width: 110 }}>Price</th>
               <th className="text-right text-[11px] uppercase font-bold p-2" style={{ color: 'var(--text-faint)' }}>Amount</th>
@@ -247,22 +263,6 @@ function ProductBuilder({ onClose, onSaved }: { onClose: () => void; onSaved: ()
                         </option>
                       ))}
                     </Select>
-                    {batchesFor(l).length > 0 && (
-                      <Select
-                        value={l.batch_id === '' ? '' : String(l.batch_id)}
-                        onChange={(e) => {
-                          const v = e.target.value === '' ? '' : Number(e.target.value);
-                          setLine(i, { batch_id: v });
-                        }}
-                        style={{ height: 32, fontSize: 12, marginTop: 6 }}
-                      >
-                        <option value="">Select cost-batch…</option>
-                        {it && looseFor(it) > 0 && (
-                          <option value="0">old stock · Rs {fmt(oldStockPrice(it))} · {looseFor(it)} left</option>
-                        )}
-                        {batchesFor(l).map((b) => <option key={b.id} value={String(Number(b.id))}>GRN cost Rs {fmt(Number(b.unit_cost))} · {b.qty_remaining} left</option>)}
-                      </Select>
-                    )}
                     {it && (
                       <div className="text-[12px] mt-1" style={{ color: short ? 'var(--red)' : 'var(--text-muted)' }}>
                         Stock: {fmt0(Number(it.stock))} · RP Rs {fmt(Number(it.retail_price))}
@@ -271,7 +271,31 @@ function ProductBuilder({ onClose, onSaved }: { onClose: () => void; onSaved: ()
                       </div>
                     )}
                   </td>
-                  <td className="p-1.5"><Input className="mono text-right" value={l.qty} onChange={(e) => setLine(i, { qty: e.target.value.replace(/\D/g, '') })} style={{ height: 36 }} /></td>
+                  <td className="p-1.5 align-top">
+                    <Select
+                      value={l.batch_id === '' ? '' : String(l.batch_id)}
+                      disabled={l.item_id === ''}
+                      onChange={(e) => pickBatch(i, l, e.target.value === '' ? '' : Number(e.target.value))}
+                      style={{ height: 36, fontSize: 12.5 }}
+                    >
+                      <option value="">
+                        {l.item_id === ''
+                          ? 'Pick an item first'
+                          : batchesFor(l).length === 0 && !(it && looseFor(it) > 0)
+                            ? 'No cost lots'
+                            : 'Select cost…'}
+                      </option>
+                      {it && looseFor(it) > 0 && (
+                        <option value="0">Rs {fmt(oldStockPrice(it))} · old stock · {fmt0(looseFor(it))} left</option>
+                      )}
+                      {batchesFor(l).map((b) => (
+                        <option key={b.id} value={String(Number(b.id))}>
+                          Rs {fmt(Number(b.unit_cost))} · GRN lot · {fmt0(Number(b.qty_remaining))} left
+                        </option>
+                      ))}
+                    </Select>
+                  </td>
+                  <td className="p-1.5 align-top"><Input className="mono text-right" value={l.qty} onChange={(e) => setLine(i, { qty: e.target.value.replace(/\D/g, '') })} style={{ height: 36 }} /></td>
                   <td className="p-1.5"><MoneyInput className="text-right" value={l.price} onChange={(v) => setLine(i, { price: v })} style={{ height: 36 }} /></td>
                   <td className="p-1.5 text-right money font-semibold">{fmt((Number(l.qty) || 0) * (Number(l.price) || 0))}</td>
                   <td className="p-1.5 text-right">
