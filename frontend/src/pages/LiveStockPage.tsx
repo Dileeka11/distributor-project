@@ -7,6 +7,7 @@ import { PageHead } from '@/components/PageHead';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Empty, SearchBar, Stat, Pagination } from '@/components/ui/Common';
+import { usePagination } from '@/lib/usePagination';
 import { Modal } from '@/components/ui/Modal';
 import { Select } from '@/components/ui/Field';
 import { SearchSelect } from '@/components/ui/SearchSelect';
@@ -38,8 +39,6 @@ export default function LiveStockPage() {
   
   // Drill-down lot view
   const [activeItemId, setActiveItemId] = useState<number | null>(null);
-  const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(25);
   const [lotData, setLotData] = useState<LotsResponse | null>(null);
   const [loadingLots, setLoadingLots] = useState(false);
 
@@ -92,11 +91,7 @@ export default function LiveStockPage() {
     );
   }, [items, searchQuery]);
 
-  const paginatedItems = useMemo(
-    () => filteredItems.slice((page - 1) * perPage, page * perPage),
-    [filteredItems, page, perPage],
-  );
-  useEffect(() => { setPage(1); }, [catFilter, searchQuery]);
+  const pager = usePagination(filteredItems, `${catFilter}|${searchQuery}`);
 
   // Calculate totals
   const totalItemCount = filteredItems.length;
@@ -196,7 +191,7 @@ export default function LiveStockPage() {
             </tr>
           </thead>
           <tbody>
-            {paginatedItems.map((item) => {
+            {pager.slice.map((item) => {
               const stock = Number(item.stock) || 0;
               const badgeKind = stock > 20 ? 'green' : stock > 0 ? 'amber' : 'red';
               return (
@@ -237,15 +232,7 @@ export default function LiveStockPage() {
             sub="No inventory records match the selected category or search filters."
           />
         )}
-        {filteredItems.length > 0 && (
-          <Pagination
-            totalItems={filteredItems.length}
-            currentPage={page}
-            itemsPerPage={perPage}
-            onPageChange={setPage}
-            onItemsPerPageChange={setPerPage}
-          />
-        )}
+        {filteredItems.length > 0 && <Pagination {...pager.props} />}
       </div>
 
       {activeItemId && (

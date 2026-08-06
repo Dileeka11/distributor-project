@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus, Edit2, Trash2, Truck, Eye, Phone, Mail, MapPin, UserRound, CalendarClock } from 'lucide-react';
 import { http, apiErrorMessage } from '@/lib/http';
 import { fmt, fmt0, prettyDate } from '@/lib/format';
@@ -7,6 +7,7 @@ import { PageHead } from '@/components/PageHead';
 import { Button } from '@/components/ui/Button';
 import { Badge, statusBadge } from '@/components/ui/Badge';
 import { Empty, Pagination } from '@/components/ui/Common';
+import { usePagination } from '@/lib/usePagination';
 import { SearchSelect } from '@/components/ui/SearchSelect';
 import { Modal } from '@/components/ui/Modal';
 import { Field, Input, Textarea } from '@/components/ui/Field';
@@ -26,15 +27,12 @@ export default function SuppliersPage() {
   const [supplierId, setSupplierId] = useState<number | ''>('');
   const [editing, setEditing] = useState<Supplier | 'new' | null>(null);
   const [viewing, setViewing] = useState<Supplier | null>(null);
-  const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(25);
 
   const load = () => http.get('/api/suppliers').then((r) => setRows(r.data.data));
   useEffect(() => { void load(); }, []);
-  useEffect(() => { setPage(1); }, [supplierId]);
 
   const filtered = supplierId === '' ? rows : rows.filter((s) => Number(s.id) === supplierId);
-  const paginated = useMemo(() => filtered.slice((page - 1) * perPage, page * perPage), [filtered, page, perPage]);
+  const pager = usePagination(filtered, String(supplierId));
   const totalPayable = rows.reduce((s, r) => s + Number(r.payable), 0);
 
   return (
@@ -52,7 +50,7 @@ export default function SuppliersPage() {
         <table className="tbl">
           <thead><tr><th>Code</th><th>Supplier</th><th>Contact</th><th>Terms</th><th className="num">Payable</th><th></th></tr></thead>
           <tbody>
-            {paginated.map((s) => (
+            {pager.slice.map((s) => (
               <tr key={s.id}>
                 <td className="mono font-semibold">{s.code}</td>
                 <td>
@@ -90,15 +88,7 @@ export default function SuppliersPage() {
           </tbody>
         </table>
         {filtered.length === 0 && <Empty icon={<Truck size={40} />} title="No suppliers found" />}
-        {filtered.length > 0 && (
-          <Pagination
-            totalItems={filtered.length}
-            currentPage={page}
-            itemsPerPage={perPage}
-            onPageChange={setPage}
-            onItemsPerPageChange={setPerPage}
-          />
-        )}
+        {filtered.length > 0 && <Pagination {...pager.props} />}
       </div>
 
       {editing && (

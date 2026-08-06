@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus, Edit2, Trash2, ShieldCheck, Eye, EyeOff } from 'lucide-react';
 import { http, apiErrorMessage } from '@/lib/http';
 import { toast, confirmDelete } from '@/lib/toast';
@@ -6,6 +6,7 @@ import { PageHead } from '@/components/PageHead';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Empty, Pagination } from '@/components/ui/Common';
+import { usePagination } from '@/lib/usePagination';
 import { Modal } from '@/components/ui/Modal';
 import { Field, Input } from '@/components/ui/Field';
 import { PAGES, CAPABILITIES } from '@/lib/pages';
@@ -19,13 +20,11 @@ export default function UsersPage() {
   const { user: me } = useAuth();
   const [rows, setRows] = useState<User[]>([]);
   const [editing, setEditing] = useState<User | 'new' | null>(null);
-  const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(25);
 
   const load = () => http.get('/api/users').then((r) => setRows(r.data.data));
   useEffect(() => { void load(); }, []);
 
-  const paginated = useMemo(() => rows.slice((page - 1) * perPage, page * perPage), [rows, page, perPage]);
+  const pager = usePagination(rows, rows.length);
 
   return (
     <div className="fade-in">
@@ -39,7 +38,7 @@ export default function UsersPage() {
         <table className="tbl">
           <thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Role</th><th>Access</th><th></th></tr></thead>
           <tbody>
-            {paginated.map((u) => (
+            {pager.slice.map((u) => (
               <tr key={u.id}>
                 <td className="font-semibold">{u.name}</td>
                 <td className="mono">{u.username}</td>
@@ -63,15 +62,7 @@ export default function UsersPage() {
           </tbody>
         </table>
         {rows.length === 0 && <Empty icon={<ShieldCheck size={40} />} title="No users yet" sub="Add a user and choose the pages they can access." />}
-        {rows.length > 0 && (
-          <Pagination
-            totalItems={rows.length}
-            currentPage={page}
-            itemsPerPage={perPage}
-            onPageChange={setPage}
-            onItemsPerPageChange={setPerPage}
-          />
-        )}
+        {rows.length > 0 && <Pagination {...pager.props} />}
       </div>
 
       {editing && (

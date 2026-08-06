@@ -7,6 +7,7 @@ import { PageHead } from '@/components/PageHead';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Empty, Avatar, Pagination } from '@/components/ui/Common';
+import { usePagination } from '@/lib/usePagination';
 import { SearchSelect } from '@/components/ui/SearchSelect';
 import { Modal } from '@/components/ui/Modal';
 import { Field, Input, Select, MoneyInput } from '@/components/ui/Field';
@@ -29,17 +30,14 @@ export default function EmployeesPage() {
   const [roleFilter, setRoleFilter] = useState('All');
   const [employeeId, setEmployeeId] = useState<number | ''>('');
   const [editing, setEditing] = useState<Employee | 'new' | null>(null);
-  const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(25);
 
   const load = () => http.get('/api/employees', { params: { role: roleFilter === 'All' ? undefined : roleFilter } }).then((r) => setRows(r.data.data));
   const loadRoles = () => http.get('/api/job-roles').then((r) => setRoles(r.data.data));
   useEffect(() => { void loadRoles(); }, []);
   useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [roleFilter]);
-  useEffect(() => { setPage(1); }, [roleFilter, employeeId]);
 
   const filtered = employeeId === '' ? rows : rows.filter((e) => Number(e.id) === employeeId);
-  const paginated = useMemo(() => filtered.slice((page - 1) * perPage, page * perPage), [filtered, page, perPage]);
+  const pager = usePagination(filtered, `${roleFilter}|${employeeId}`);
   const monthlyWage = rows.reduce((s, e) => s + Number(e.basic_salary), 0);
 
   return (
@@ -61,7 +59,7 @@ export default function EmployeesPage() {
         <table className="tbl">
           <thead><tr><th>Code</th><th>Employee</th><th>Role</th><th>Contact</th><th className="num">Basic salary</th><th className="num">Hourly rate</th><th>Status</th><th></th></tr></thead>
           <tbody>
-            {paginated.map((e) => (
+            {pager.slice.map((e) => (
               <tr key={e.id}>
                 <td className="mono font-semibold">{e.code}</td>
                 <td>
@@ -93,15 +91,7 @@ export default function EmployeesPage() {
           </tbody>
         </table>
         {filtered.length === 0 && <Empty icon={<UserCog size={40} />} title="No employees yet" sub="Add your first employee to start tracking attendance and payroll." />}
-        {filtered.length > 0 && (
-          <Pagination
-            totalItems={filtered.length}
-            currentPage={page}
-            itemsPerPage={perPage}
-            onPageChange={setPage}
-            onItemsPerPageChange={setPerPage}
-          />
-        )}
+        {filtered.length > 0 && <Pagination {...pager.props} />}
       </div>
 
       {editing && (

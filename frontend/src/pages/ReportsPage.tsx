@@ -5,6 +5,7 @@ import { fmt, fmt0, prettyDate } from '@/lib/format';
 import { PageHead } from '@/components/PageHead';
 import { Button } from '@/components/ui/Button';
 import { Segmented, Empty, Pagination } from '@/components/ui/Common';
+import { usePagination } from '@/lib/usePagination';
 import { Badge, statusBadge } from '@/components/ui/Badge';
 import { Input } from '@/components/ui/Field';
 import { useSettings } from '@/store/settings';
@@ -45,11 +46,6 @@ export default function ReportsPage() {
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [applied, setApplied] = useState<{ side: Side; partyId: number | ''; from: string; to: string } | null>(null);
-  const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(25);
-  const [billPage, setBillPage] = useState(1);
-  const [billPerPage, setBillPerPage] = useState(25);
-  useEffect(() => { setPage(1); setBillPage(1); }, [applied]);
 
   useEffect(() => {
     void (async () => {
@@ -243,6 +239,11 @@ export default function ReportsPage() {
     return { rows, byMode, total, totalQty, outstanding, openingDue, isCust, partyName, txns, txnTotal, txnPaid };
   }, [applied, settlements, cheques, grnCheques, grns, invoices, grnQty, invChequeTotal, grnChequeTotal, receivables, payables, parties]);
 
+  // Both tables restart at page one whenever a new report is applied.
+  const appliedKey = applied ? `${applied.side}|${applied.partyId}|${applied.from}|${applied.to}` : '';
+  const collectionPager = usePagination(report?.rows ?? [], appliedKey);
+  const billPager = usePagination(report?.txns ?? [], appliedKey);
+
   const periodLabel = applied
     ? (applied.from || applied.to ? `${applied.from ? prettyDate(applied.from) : '…'} → ${applied.to ? prettyDate(applied.to) : '…'}` : 'All dates')
     : '';
@@ -378,7 +379,7 @@ export default function ReportsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {report.rows.slice((page - 1) * perPage, page * perPage).map((r) => (
+                  {collectionPager.slice.map((r) => (
                     <tr key={r.id}>
                       <td className="text-[12px]" style={{ color: 'var(--text-muted)' }}>{prettyDate(r.date)}</td>
                       <td className="mono font-semibold">{r.ref}</td>
@@ -394,15 +395,7 @@ export default function ReportsPage() {
               </table>
             </div>
             {report.rows.length === 0 && <Empty icon={<FileText size={40} />} title="No transactions" sub="No collections/payments for this party in the selected period." />}
-            {report.rows.length > 0 && (
-              <Pagination
-                totalItems={report.rows.length}
-                currentPage={page}
-                itemsPerPage={perPage}
-                onPageChange={setPage}
-                onItemsPerPageChange={setPerPage}
-              />
-            )}
+            {report.rows.length > 0 && <Pagination {...collectionPager.props} />}
 
             {/* Every bill in the window, not only the money that moved. */}
             <div className="border-t border-border">
@@ -429,7 +422,7 @@ export default function ReportsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {report.txns.slice((billPage - 1) * billPerPage, billPage * billPerPage).map((t) => (
+                    {billPager.slice.map((t) => (
                       <tr key={t.id}>
                         <td className="text-[12px]" style={{ color: 'var(--text-muted)' }}>{prettyDate(t.date)}</td>
                         <td className="mono font-semibold">{t.no}</td>
@@ -450,15 +443,7 @@ export default function ReportsPage() {
                 <Empty icon={<FileText size={40} />} title={report.isCust ? 'No invoices' : 'No purchases'}
                   sub="Nothing was billed to this party in the selected period." />
               )}
-              {report.txns.length > 0 && (
-                <Pagination
-                  totalItems={report.txns.length}
-                  currentPage={billPage}
-                  itemsPerPage={billPerPage}
-                  onPageChange={setBillPage}
-                  onItemsPerPageChange={setBillPerPage}
-                />
-              )}
+              {report.txns.length > 0 && <Pagination {...billPager.props} />}
               {report.txns.length > 0 && (
                 <div className="flex flex-wrap items-center gap-6 px-5 py-4 border-t border-border bg-surface-2">
                   <div>

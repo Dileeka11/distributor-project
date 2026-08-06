@@ -6,6 +6,7 @@ import { toast, confirmDelete } from '@/lib/toast';
 import { PageHead } from '@/components/PageHead';
 import { Button } from '@/components/ui/Button';
 import { Empty, Pagination } from '@/components/ui/Common';
+import { usePagination } from '@/lib/usePagination';
 import { Modal } from '@/components/ui/Modal';
 import { Field, Select, MoneyInput } from '@/components/ui/Field';
 import { useSettings } from '@/store/settings';
@@ -24,8 +25,6 @@ export default function PayrollPage() {
   const [roleFilter, setRoleFilter] = useState('All');
   const [employeeId, setEmployeeId] = useState<number | ''>('');
   const [open, setOpen] = useState(false);
-  const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(25);
 
   const load = () => http.get('/api/payrolls', { params: { year } }).then((r) => setRows(r.data.data));
   const loadEmployees = () => http.get('/api/employees').then((r) => setEmployees((r.data.data as Employee[]).filter((e) => e.active)));
@@ -51,8 +50,7 @@ export default function PayrollPage() {
     && (employeeId === '' || Number(p.employee_id) === employeeId),
   );
   const totalNet = filtered.reduce((s, p) => s + Number(p.net_pay), 0);
-  const paginated = useMemo(() => filtered.slice((page - 1) * perPage, page * perPage), [filtered, page, perPage]);
-  useEffect(() => { setPage(1); }, [year, monthFilter, roleFilter, employeeId]);
+  const pager = usePagination(filtered, `${year}|${monthFilter}|${roleFilter}|${employeeId}`);
 
   const del = async (p: Payroll) => {
     if (!(await confirmDelete({ title: 'Delete payslip?', html: `Remove <b>${p.code}</b> for ${p.employee?.name}?` }))) return;
@@ -137,7 +135,7 @@ export default function PayrollPage() {
             </tr>
           </thead>
           <tbody>
-            {paginated.map((p) => (
+            {pager.slice.map((p) => (
               <tr key={p.id}>
                 <td className="mono font-semibold">{p.code}</td>
                 <td className="font-semibold">{p.employee?.name ?? '—'}</td>
@@ -167,15 +165,7 @@ export default function PayrollPage() {
             title={rows.length === 0 ? 'No payslips yet' : 'No matching payslips'}
             sub={rows.length === 0 ? 'Generate a monthly payslip from attendance hours and salary.' : 'Try a different month, role or employee.'} />
         )}
-        {filtered.length > 0 && (
-          <Pagination
-            totalItems={filtered.length}
-            currentPage={page}
-            itemsPerPage={perPage}
-            onPageChange={setPage}
-            onItemsPerPageChange={setPerPage}
-          />
-        )}
+        {filtered.length > 0 && <Pagination {...pager.props} />}
       </div>
 
       {open && (
@@ -271,9 +261,9 @@ function GenerateModal({ employees, onClose, onSaved }: {
     () => (role === 'All' ? employees : employees.filter((e) => e.role === role)),
     [employees, role],
   );
-  useEffect(() => {
-    if (employeeId !== '' && !shortlist.some((e) => Number(e.id) === employeeId)) setEmployeeId('');
-  }, [shortlist, employeeId]);
+  // Dropped during render, not in an effect, so the form never shows a name the
+  // chosen role does not contain.
+  if (employeeId !== '' && !shortlist.some((e) => Number(e.id) === employeeId)) setEmployeeId('');
 
   const save = async () => {
     if (!employeeId) return;

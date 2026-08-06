@@ -7,6 +7,7 @@ import { PageHead } from '@/components/PageHead';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { SearchBar, Empty, Stat, Pagination } from '@/components/ui/Common';
+import { usePagination } from '@/lib/usePagination';
 import { Modal } from '@/components/ui/Modal';
 import { Field, Input, Textarea } from '@/components/ui/Field';
 import { SearchSelect } from '@/components/ui/SearchSelect';
@@ -20,18 +21,12 @@ export default function SalesReturnsPage() {
   const [q, setQ] = useState('');
   const [create, setCreate] = useState(false);
   const [view, setView] = useState<SalesReturn | null>(null);
-  const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(25);
 
   const load = () => http.get('/api/sales-returns', { params: { q } }).then((r) => setRows(r.data.data));
 
   useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [q]);
-  useEffect(() => { setPage(1); }, [q, rows.length]);
 
-  const paginated = useMemo(
-    () => rows.slice((page - 1) * perPage, page * perPage),
-    [rows, page, perPage],
-  );
+  const pager = usePagination(rows, `${q}|${rows.length}`);
 
   const returnedTotal = rows.reduce((s, r) => s + Number(r.total), 0);
   const creditLeft = rows.reduce((s, r) => s + (Number(r.total) - Number(r.used ?? 0)), 0);
@@ -71,7 +66,7 @@ export default function SalesReturnsPage() {
         <table className="tbl">
           <thead><tr><th>Return</th><th>Date</th><th>Customer</th><th>Against invoice</th><th className="num">Items</th><th className="num">Value</th><th>Credit</th><th></th></tr></thead>
           <tbody>
-            {paginated.map((r) => {
+            {pager.slice.map((r) => {
               const left = Number(r.total) - Number(r.used ?? 0);
               return (
                 <tr key={r.id} className="row-click" onClick={() => setView(r)}>
@@ -101,15 +96,7 @@ export default function SalesReturnsPage() {
             sub="Take goods back off an invoice with New Return."
           />
         )}
-        {rows.length > 0 && (
-          <Pagination
-            totalItems={rows.length}
-            currentPage={page}
-            itemsPerPage={perPage}
-            onPageChange={setPage}
-            onItemsPerPageChange={(n) => { setPerPage(n); setPage(1); }}
-          />
-        )}
+        {rows.length > 0 && <Pagination {...pager.props} />}
       </div>
 
       {create && <CreateReturn onClose={() => setCreate(false)} onSaved={() => { setCreate(false); void load(); }} />}

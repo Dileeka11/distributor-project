@@ -8,6 +8,7 @@ import { PageHead } from '@/components/PageHead';
 import { Button } from '@/components/ui/Button';
 import { Badge, statusBadge } from '@/components/ui/Badge';
 import { SearchBar, Empty, Segmented, Stat, Switch, Pagination } from '@/components/ui/Common';
+import { usePagination } from '@/lib/usePagination';
 import { useAuth } from '@/store/auth';
 import { canUse } from '@/lib/pages';
 import { Modal } from '@/components/ui/Modal';
@@ -170,13 +171,10 @@ export default function GrnsPage() {
   const [q, setQ] = useState('');
   const [tab, setTab] = useState<Tab>('all');
   const [create, setCreate] = useState(false);
-  const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(25);
 
   const load = () => http.get('/api/grns', { params: { q, type: tab === 'all' || tab === 'cancelled' ? undefined : tab } }).then((r) => setRows(r.data.data));
 
   useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [q, tab]);
-  useEffect(() => { setPage(1); }, [q, tab, rows.length]);
 
   // Fetch the full GRN (supplier + lines + cheques) and open the print document.
   const printGrn = async (g: Grn) => {
@@ -207,9 +205,7 @@ export default function GrnsPage() {
     return rows;
   }, [rows, tab]);
 
-  const paginated = useMemo(() => {
-    return displayedRows.slice((page - 1) * perPage, page * perPage);
-  }, [displayedRows, page, perPage]);
+  const pager = usePagination(displayedRows, `${q}|${tab}|${rows.length}`);
 
   const [editGrn, setEditGrn] = useState<Grn | null>(null);
   const [view, setView] = useState<Grn | null>(null);
@@ -243,7 +239,7 @@ export default function GrnsPage() {
         <table className="tbl">
           <thead><tr><th>GRN</th><th>Date</th><th>Supplier</th><th>Type</th><th className="num">Total</th><th className="num">Balance</th><th>Status</th><th></th></tr></thead>
           <tbody>
-            {paginated.map((g) => {
+            {pager.slice.map((g) => {
               const st = statusBadge(g.status);
               const cancelled = !!g.cancelled_at;
               const bal = Number(g.total) - Number(g.paid);
@@ -290,15 +286,7 @@ export default function GrnsPage() {
             sub={tab === 'cancelled' ? "Cancelled GRNs will show up here." : "Record a goods-received note to add stock."} 
           />
         )}
-        {displayedRows.length > 0 && (
-          <Pagination
-            totalItems={displayedRows.length}
-            currentPage={page}
-            itemsPerPage={perPage}
-            onPageChange={setPage}
-            onItemsPerPageChange={setPerPage}
-          />
-        )}
+        {displayedRows.length > 0 && <Pagination {...pager.props} />}
       </div>
 
       {(create || editGrn) && (

@@ -7,6 +7,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Segmented, Pagination } from '@/components/ui/Common';
+import { usePagination } from '@/lib/usePagination';
 import { Field, Input, Select, Textarea } from '@/components/ui/Field';
 import { SearchSelect } from '@/components/ui/SearchSelect';
 import { useAuth } from '@/store/auth';
@@ -162,11 +163,8 @@ function ApplyTab({ employees, categories, onApplied }: {
 // ---- Requests / approval -----------------------------------------------------
 function RequestsTab({ leaves, isAdmin, onChanged }: { leaves: Leave[]; isAdmin: boolean; onChanged: () => void }) {
   const [filter, setFilter] = useState<'pending' | 'approved' | 'rejected' | 'all'>('pending');
-  const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(25);
   const rows = leaves.filter((l) => filter === 'all' || l.status === filter);
-  const paged = rows.slice((page - 1) * perPage, page * perPage);
-  useEffect(() => { setPage(1); }, [filter]);
+  const pager = usePagination(rows, filter);
 
   const decide = async (l: Leave, status: 'approved' | 'rejected') => {
     const note = window.prompt(status === 'approved' ? 'Approval note (optional):' : 'Reason for rejecting (optional):', '');
@@ -196,7 +194,7 @@ function RequestsTab({ leaves, isAdmin, onChanged }: { leaves: Leave[]; isAdmin:
           <table className="tbl">
             <thead><tr><th>Employee</th><th>Category</th><th>From</th><th className="num">Days</th><th>Reason</th><th>Status</th><th></th></tr></thead>
             <tbody>
-              {paged.map((l) => (
+              {pager.slice.map((l) => (
                 <tr key={l.id}>
                   <td className="font-semibold">{l.employee?.name ?? '—'}</td>
                   <td><span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: l.category?.color ?? '#999' }} />{l.category?.name ?? '—'}</span></td>
@@ -224,15 +222,7 @@ function RequestsTab({ leaves, isAdmin, onChanged }: { leaves: Leave[]; isAdmin:
           </table>
         </div>
         {rows.length === 0 && <div className="text-center py-8 text-[13px]" style={{ color: 'var(--text-faint)' }}>No {filter === 'all' ? '' : filter} leave requests.</div>}
-        {rows.length > 0 && (
-          <Pagination
-            totalItems={rows.length}
-            currentPage={page}
-            itemsPerPage={perPage}
-            onPageChange={setPage}
-            onItemsPerPageChange={setPerPage}
-          />
-        )}
+        {rows.length > 0 && <Pagination {...pager.props} />}
       </div>
       {!isAdmin && <div className="text-[11.5px] mt-2" style={{ color: 'var(--text-faint)' }}>Only an admin can approve or reject. Your requests stay pending until reviewed.</div>}
     </div>

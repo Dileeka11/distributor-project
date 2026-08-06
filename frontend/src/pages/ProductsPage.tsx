@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus, X, Boxes, Hammer, Trash2 } from 'lucide-react';
 import { http, apiErrorMessage } from '@/lib/http';
 import { fmt, fmt0 } from '@/lib/format';
@@ -7,6 +7,7 @@ import { PageHead } from '@/components/PageHead';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Empty, Pagination } from '@/components/ui/Common';
+import { usePagination } from '@/lib/usePagination';
 import { Modal } from '@/components/ui/Modal';
 import { Field, Input, Select, MoneyInput } from '@/components/ui/Field';
 import { TotalRow } from '@/pages/InvoicesPage';
@@ -19,18 +20,11 @@ export default function ProductsPage() {
   const [rows, setRows] = useState<Product[]>([]);
   const [create, setCreate] = useState(false);
   const [assembling, setAssembling] = useState<Product | null>(null);
-  const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(25);
 
   const load = () => http.get('/api/products').then((r) => setRows(r.data.data));
   useEffect(() => { void load(); }, []);
 
-  const paginated = useMemo(() => {
-    return rows.slice((page - 1) * perPage, page * perPage);
-  }, [rows, page, perPage]);
-
-  // Reset page to 1 on rows reload/change
-  useEffect(() => { setPage(1); }, [rows.length]);
+  const pager = usePagination(rows, rows.length);
 
   const del = async (p: Product) => {
     const name = p.item?.name ?? 'this product';
@@ -54,7 +48,7 @@ export default function ProductsPage() {
         <table className="tbl">
           <thead><tr><th>Code</th><th>Product</th><th>Components</th><th className="num">Actual price</th><th className="num">Selling price</th><th className="num">Margin</th><th className="num">Stock</th><th></th></tr></thead>
           <tbody>
-            {paginated.map((p) => {
+            {pager.slice.map((p) => {
               const actual = Number(p.actual_price);
               const selling = Number(p.selling_price);
               const margin = selling - actual;
@@ -90,15 +84,7 @@ export default function ProductsPage() {
           <Empty icon={<Boxes size={40} />} title="No products yet"
             sub="Combine two or more items into a new product — it becomes sellable on invoices." />
         )}
-        {rows.length > 0 && (
-          <Pagination
-            totalItems={rows.length}
-            currentPage={page}
-            itemsPerPage={perPage}
-            onPageChange={setPage}
-            onItemsPerPageChange={setPerPage}
-          />
-        )}
+        {rows.length > 0 && <Pagination {...pager.props} />}
       </div>
 
       {create && <ProductBuilder onClose={() => setCreate(false)} onSaved={() => { setCreate(false); void load(); }} />}
