@@ -13,7 +13,7 @@ import { Field, Input, Select, MoneyInput } from '@/components/ui/Field';
 import { TotalRow } from '@/pages/InvoicesPage';
 import type { Category, Item, ItemBatch, Product } from '@/types';
 
-interface DraftLine { item_id: number | ''; batch_id: number | ''; qty: string; price: string; }
+interface DraftLine { item_id: number | ''; batch_id: number | ''; qty: string; price: string; perUnit?: number; }
 const blankLine = (): DraftLine => ({ item_id: '', batch_id: '', qty: '1', price: '0' });
 
 export default function ProductsPage() {
@@ -360,9 +360,11 @@ function AssembleModal({ product, onClose, onSaved }: { product: Product; onClos
     setLines(comps.map((c) => ({
       item_id: Number(c.item_id),
       batch_id: '' as number | '',
-      // Seeded at one unit's worth, rounded up to whole items.
+      // Seeded at one unit's worth, rounded up to whole items. perUnit keeps the
+      // recipe's per-unit rate so Qty auto-scales when the run size changes.
       qty: String(Math.max(1, Math.ceil(Number(c.qty)))),
       price: Number(c.price).toFixed(2),
+      perUnit: Number(c.qty),
     })));
     comps.forEach((c) => loadBatches(Number(c.item_id)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -398,6 +400,21 @@ function AssembleModal({ product, onClose, onSaved }: { product: Product; onClos
     lines.some((x, idx) => idx !== exceptIdx && x.item_id === l.item_id && x.batch_id === batchId);
   const addLine = () => setLines((ls) => [...ls, blankLine()]);
   const delLine = (i: number) => setLines((ls) => (ls.length > 1 ? ls.filter((_, idx) => idx !== i) : ls));
+
+  // Changing the run size rescales each line's Qty from its per-unit rate. Lines
+  // stay editable — a manual Qty edit resets that line's per-unit rate.
+  const changeUnits = (raw: string) => {
+    const v = raw.replace(/\D/g, '');
+    setUnits(v);
+    const u = Math.max(1, Number(v) || 1);
+    setLines((ls) => ls.map((l) => (l.perUnit != null
+      ? { ...l, qty: String(Math.max(1, Math.ceil(l.perUnit * u))) }
+      : l)));
+  };
+  const setQty = (i: number, raw: string) => {
+    const q = raw.replace(/\D/g, '');
+    setLine(i, { qty: q, perUnit: (Number(q) || 0) / unitsN });
+  };
 
   const validLines = lines.filter((l) => l.item_id !== '' && Number(l.qty) > 0);
   const runCost = validLines.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.price) || 0), 0);
@@ -446,7 +463,7 @@ function AssembleModal({ product, onClose, onSaved }: { product: Product; onClos
       <div className="grid grid-cols-2 gap-4 mb-4">
         <Field label="Units to assemble" req hint="How many finished units this run makes.">
           <Input className="mono text-right" inputMode="numeric" value={units}
-            onChange={(e) => setUnits(e.target.value.replace(/\D/g, ''))} />
+            onChange={(e) => changeUnits(e.target.value)} />
         </Field>
       </div>
 
@@ -514,7 +531,7 @@ function AssembleModal({ product, onClose, onSaved }: { product: Product; onClos
                   </td>
                   <td className="p-1.5 align-top">
                     <Input className="mono text-right" value={l.qty}
-                      onChange={(e) => setLine(i, { qty: e.target.value.replace(/\D/g, '') })}
+                      onChange={(e) => setQty(i, e.target.value)}
                       style={{ height: 36, borderColor: over ? 'var(--red)' : undefined }} />
                   </td>
                   <td className="p-1.5 align-top">

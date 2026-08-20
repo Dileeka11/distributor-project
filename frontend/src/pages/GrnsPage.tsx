@@ -313,6 +313,7 @@ function CreateGrn({ editGrn, onClose, onSaved }: { editGrn?: Grn | null; onClos
   const isEdit = !!editGrn;
   const [type, setType] = useState<'cash' | 'credit'>('credit');
   const [supplierId, setSupplierId] = useState<number | ''>('');
+  const [quickSupplier, setQuickSupplier] = useState(false);
   const [lines, setLines] = useState<DraftLine[]>([blankLine()]);
   const [paid, setPaid] = useState('');
   const [cheques, setCheques] = useState<ChequeRow[]>([]);
@@ -452,6 +453,7 @@ function CreateGrn({ editGrn, onClose, onSaved }: { editGrn?: Grn | null; onClos
   };
 
   return (
+    <>
     <Modal
       xl
       title={isEdit ? `Edit GRN ${editGrn!.no}` : 'New Goods Received Note'}
@@ -500,15 +502,20 @@ function CreateGrn({ editGrn, onClose, onSaved }: { editGrn?: Grn | null; onClos
       </div>
 
       <div className="mb-5">
-        <Field label="Supplier" req hint="Who you are buying stock from">
-          <SearchSelect
-            items={suppliers}
-            value={supplierId}
-            onChange={setSupplierId}
-            allLabel="Select supplier…"
-            placeholder="Search name, code or mobile…"
-            subtitle={(s) => `${s.code}${s.phone ? ` · ${s.phone}` : ''}`}
-          />
+        <Field label="Supplier" req hint="Who you are buying stock from — use + to add a new one">
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <SearchSelect
+                items={suppliers}
+                value={supplierId}
+                onChange={setSupplierId}
+                allLabel="Select supplier…"
+                placeholder="Search name, code or mobile…"
+                subtitle={(s) => `${s.code}${s.phone ? ` · ${s.phone}` : ''}`}
+              />
+            </div>
+            <Button variant="subtle" icon={<Plus size={16} />} onClick={() => setQuickSupplier(true)} aria-label="Add supplier" title="Add supplier" />
+          </div>
         </Field>
       </div>
 
@@ -709,6 +716,70 @@ function CreateGrn({ editGrn, onClose, onSaved }: { editGrn?: Grn | null; onClos
             <TotalRow k="Payable (outstanding)" v={fmt(totals.balance)} accent />
           </>)}
         </div>
+      </div>
+    </Modal>
+    {quickSupplier && (
+      <QuickSupplierModal
+        nextCode={nextSupplierCode(suppliers)}
+        onClose={() => setQuickSupplier(false)}
+        onCreated={(s) => {
+          setSuppliers((cur) => [...cur, s].sort((a, b) => a.name.localeCompare(b.name)));
+          setSupplierId(Number(s.id));
+          setQuickSupplier(false);
+        }}
+      />
+    )}
+    </>
+  );
+}
+
+const nextSupplierCode = (rows: Supplier[]): string => {
+  const max = rows.reduce((m, s) => Math.max(m, parseInt(s.code.replace(/\D/g, ''), 10) || 0), 0);
+  return 'SUP-' + String(max + 1).padStart(3, '0');
+};
+
+function QuickSupplierModal({ nextCode, onClose, onCreated }: { nextCode: string; onClose: () => void; onCreated: (s: Supplier) => void }) {
+  const [code, setCode] = useState(nextCode);
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [termsDays, setTermsDays] = useState('30');
+  const [busy, setBusy] = useState(false);
+  const valid = code.trim() && name.trim();
+
+  const save = async () => {
+    if (!valid || busy) return;
+    setBusy(true);
+    try {
+      const r = await http.post('/api/suppliers', {
+        code: code.trim(), name: name.trim(), contact: null,
+        phone: phone.trim() || null, email: null, address: null,
+        terms_days: Number(termsDays) || 0,
+      });
+      toast('Supplier created');
+      onCreated(r.data.data as Supplier);
+    } catch (e) { toast(apiErrorMessage(e), 'err'); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <Modal
+      title="Add Supplier"
+      onClose={() => { if (!busy) onClose(); }}
+      footer={<><Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button><Button variant="primary" disabled={!valid || busy} onClick={save}>Create</Button></>}
+    >
+      <div className="grid grid-cols-2 gap-4">
+        <Field label="Code" req hint="Auto-generated — editable.">
+          <Input className="mono" value={code} onChange={(e) => setCode(e.target.value)} />
+        </Field>
+        <Field label="Supplier name" req>
+          <Input value={name} autoFocus onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void save(); } }} placeholder="e.g. Lanka Pharma Imports" />
+        </Field>
+        <Field label="Phone">
+          <Input className="mono" value={phone} onChange={(e) => setPhone(e.target.value)} />
+        </Field>
+        <Field label="Payment terms (days)">
+          <Input className="mono" inputMode="numeric" value={termsDays} onChange={(e) => setTermsDays(e.target.value.replace(/\D/g, ''))} />
+        </Field>
       </div>
     </Modal>
   );
