@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Plus, X, Boxes, Hammer, Trash2 } from 'lucide-react';
 import { http, apiErrorMessage } from '@/lib/http';
 import { fmt, fmt0 } from '@/lib/format';
-import { toast, confirmDelete } from '@/lib/toast';
+import { toast, confirmDelete, warnDialog } from '@/lib/toast';
 import { PageHead } from '@/components/PageHead';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -15,6 +15,29 @@ import type { Category, Item, ItemBatch, Product } from '@/types';
 
 interface DraftLine { item_id: number | ''; batch_id: number | ''; qty: string; price: string; }
 const blankLine = (): DraftLine => ({ item_id: '', batch_id: '', qty: '1', price: '0' });
+interface CostLot { key: string; cost: number; qty: number; earlier?: boolean }
+
+/**
+ * A product's units in stock, grouped by what they cost to make: one lot per
+ * assembly run, plus any units from before runs were costed, which carry the
+ * product's recorded actual price.
+ */
+function costLots(p: Product): CostLot[] {
+  const batches = p.item?.batches ?? [];
+  const stock = Number(p.item?.stock ?? 0);
+  const earlier = stock - batches.reduce((s, b) => s + Number(b.qty_remaining), 0);
+  const lots: CostLot[] = [];
+  if (earlier > 0 || batches.length === 0) {
+    lots.push({ key: 'earlier', cost: Number(p.actual_price), qty: Math.max(0, earlier), earlier: batches.length > 0 });
+  }
+  batches.forEach((b) => lots.push({ key: String(b.id), cost: Number(b.unit_cost), qty: Number(b.qty_remaining) }));
+  return lots;
+}
+// One line per cost lot, the same height in every column so they read across.
+const LOT_LINE = { height: 26, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 } as const;
+
+// Item names are placed into SweetAlert HTML.
+const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
 export default function ProductsPage() {
   const [rows, setRows] = useState<Product[]>([]);
@@ -49,10 +72,8 @@ export default function ProductsPage() {
           <thead><tr><th>Code</th><th>Product</th><th>Components</th><th className="num">Actual price</th><th className="num">Selling price</th><th className="num">Margin</th><th className="num">Stock</th><th></th></tr></thead>
           <tbody>
             {pager.slice.map((p) => {
-              const actual = Number(p.actual_price);
               const selling = Number(p.selling_price);
-              const margin = selling - actual;
-              const stock = Number(p.item?.stock ?? 0);
+              const lots = costLots(p);
               return (
                 <tr key={p.id}>
                   <td className="mono font-semibold">{p.item?.code ?? '—'}</td>
@@ -63,11 +84,26 @@ export default function ProductsPage() {
                   <td className="text-[12.5px]" style={{ color: 'var(--text-muted)' }}>
                     {(p.components ?? []).map((c) => `${fmt0(Number(c.qty))} × ${c.name}`).join(' · ')}
                   </td>
-                  <td className="num money">{fmt(actual)}</td>
+                  {/* Each cost lot on its own line: what it cost, the margin at the
+                      selling price, and how many units of it are left. */}
+                  <td className="num money">
+                    {lots.map((lot) => (
+                      <div key={lot.key} style={LOT_LINE}>
+                        {lot.earlier && <span className="text-[11px]" style={{ color: 'var(--text-faint)' }}>earlier</span>}
+                        {fmt(lot.cost)}
+                      </div>
+                    ))}
+                  </td>
                   <td className="num money font-bold">{fmt(selling)}</td>
-                  <td className="num money" style={{ color: margin >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmt(margin)}</td>
+                  <td className="num money">
+                    {lots.map((lot) => (
+                      <div key={lot.key} style={{ ...LOT_LINE, color: selling - lot.cost >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmt(selling - lot.cost)}</div>
+                    ))}
+                  </td>
                   <td className="num">
-                    <Badge kind={stock > 0 ? 'green' : 'red'}>{fmt0(stock)}</Badge>
+                    {lots.map((lot) => (
+                      <div key={lot.key} style={LOT_LINE}><Badge kind={lot.qty > 0 ? 'green' : 'red'}>{fmt0(lot.qty)}</Badge></div>
+                    ))}
                   </td>
                   <td className="num">
                     <div className="flex gap-1.5 justify-end">
@@ -88,7 +124,7 @@ export default function ProductsPage() {
       </div>
 
       {create && <ProductBuilder onClose={() => setCreate(false)} onSaved={() => { setCreate(false); void load(); }} />}
-      {assembling && <AssembleModal product={assembling} onClose={() => setAssembling(null)} onSaved={() => { setAssembling(null); void load(); }} />}
+      {assembling && <AssembleModal key={assembling.id} product={assembling} onClose={() => setAssembling(null)} onSaved={() => { setAssembling(null); void load(); }} />}
     </div>
   );
 }
@@ -343,7 +379,14 @@ function ProductBuilder({ onClose, onSaved }: { onClose: () => void; onSaved: ()
  */
 function AssembleModal({ product, onClose, onSaved }: { product: Product; onClose: () => void; onSaved: () => void }) {
   const [units, setUnits] = useState('1');
-  const [lines, setLines] = useState<DraftLine[]>([]);
+  // Seeded from the recipe at one unit's worth, rounded up to whole items;
+  // changing the units re-derives the quantities (see fitToUnits).
+  const [lines, setLines] = useState<DraftLine[]>(() => (product.components ?? []).map((c) => ({
+    item_id: Number(c.item_id),
+    batch_id: '' as number | '',
+    qty: String(Math.max(1, Math.ceil(Number(c.qty)))),
+    price: Number(c.price).toFixed(2),
+  })));
   const [items, setItems] = useState<Item[]>([]);
   const [batchesByItem, setBatchesByItem] = useState<Record<number, ItemBatch[]>>({});
   const [busy, setBusy] = useState(false);
@@ -356,15 +399,7 @@ function AssembleModal({ product, onClose, onSaved }: { product: Product; onClos
 
   useEffect(() => {
     void http.get('/api/items').then((r) => setItems(r.data.data));
-    const comps = product.components ?? [];
-    setLines(comps.map((c) => ({
-      item_id: Number(c.item_id),
-      batch_id: '' as number | '',
-      // Seeded at one unit's worth, rounded up to whole items.
-      qty: String(Math.max(1, Math.ceil(Number(c.qty)))),
-      price: Number(c.price).toFixed(2),
-    })));
-    comps.forEach((c) => loadBatches(Number(c.item_id)));
+    (product.components ?? []).forEach((c) => loadBatches(Number(c.item_id)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [product.id]);
 
@@ -386,28 +421,118 @@ function AssembleModal({ product, onClose, onSaved }: { product: Product; onClos
   };
   const pickBatch = (i: number, l: DraftLine, v: number | '') => {
     const it = itemFor(l);
-    if (v === '') { setLine(i, { batch_id: '' }); return; }
-    if (v === 0) { setLine(i, { batch_id: 0, price: it ? oldStockPrice(it).toFixed(2) : '0' }); return; }
-    const b = batchesFor(l).find((x) => Number(x.id) === v);
-    setLine(i, { batch_id: v, price: b ? Number(b.unit_cost).toFixed(2) : '0' });
+    let patch: Partial<DraftLine>;
+    if (v === '') patch = { batch_id: '' };
+    else if (v === 0) patch = { batch_id: 0, price: it ? oldStockPrice(it).toFixed(2) : '0' };
+    else {
+      const b = batchesFor(l).find((x) => Number(x.id) === v);
+      patch = { batch_id: v, price: b ? Number(b.unit_cost).toFixed(2) : '0' };
+    }
+    const next = lines.map((x, idx) => (idx === i ? { ...x, ...patch } : x));
+    setLines(next);
+    // Choosing the lot is when a shortfall first shows, so check straight away.
+    if (v !== '') void warnShort(next);
   };
-  const takenElsewhere = (l: DraftLine, exceptIdx: number) =>
-    l.item_id === '' ? 0 : lines.reduce(
+  /** What the row's cost lot holds: old stock, a GRN lot, or the whole item when no lot is picked. */
+  const poolFor = (l: DraftLine) => {
+    const it = itemFor(l);
+    if (!it) return Infinity;
+    if (l.batch_id === 0) return looseFor(it);
+    const batch = batchFor(l);
+    return batch ? Number(batch.qty_remaining) : Number(it.stock);
+  };
+  const takenElsewhere = (l: DraftLine, exceptIdx: number, ls: DraftLine[] = lines) =>
+    l.item_id === '' ? 0 : ls.reduce(
       (s, x, idx) => s + (idx !== exceptIdx && x.item_id === l.item_id && x.batch_id === l.batch_id ? (Number(x.qty) || 0) : 0), 0);
   const lotTaken = (l: DraftLine, exceptIdx: number, batchId: number) =>
     lines.some((x, idx) => idx !== exceptIdx && x.item_id === l.item_id && x.batch_id === batchId);
   const addLine = () => setLines((ls) => [...ls, blankLine()]);
   const delLine = (i: number) => setLines((ls) => (ls.length > 1 ? ls.filter((_, idx) => idx !== i) : ls));
 
+  // Per-unit recipe quantity of each component item (summed, since one item
+  // can sit on more than one recipe line).
+  const recipe = new Map<number, number>();
+  (product.components ?? []).forEach((c) =>
+    recipe.set(Number(c.item_id), (recipe.get(Number(c.item_id)) ?? 0) + Number(c.qty)));
+
+  /**
+   * Re-derive every recipe item's quantity for a run of `u` units. An item split
+   * over several rows (one per cost lot) fills the earlier rows up to what their
+   * lot holds and leaves the rest to its last row. Rows stay editable after.
+   */
+  const fitToUnits = (ls: DraftLine[], u: number): DraftLine[] => {
+    const out = ls.map((l) => ({ ...l }));
+    recipe.forEach((perUnit, itemId) => {
+      const rows = out.filter((l) => l.item_id === itemId);
+      // Same rounding as the server: a fractional need takes a whole item.
+      let left = Math.ceil(Math.round(perUnit * u * 1000) / 1000);
+      rows.forEach((l, k) => {
+        const take = k === rows.length - 1 ? left : Math.min(left, Math.max(0, poolFor(l)));
+        l.qty = String(take);
+        left -= take;
+      });
+    });
+    return out;
+  };
+
+  const lotLabel = (l: DraftLine, it: Item) => {
+    if (l.batch_id === 0) return `Rs ${fmt(oldStockPrice(it))} old stock`;
+    const b = batchFor(l);
+    return b ? `Rs ${fmt(Number(b.unit_cost))} cost lot` : 'stock';
+  };
+
+  /**
+   * Say when a row wants more than its cost lot holds. If the item's other lots
+   * can cover it, offer to keep what this lot has and move the rest onto a new
+   * row, where another cost lot is picked.
+   */
+  const warnShort = async (ls: DraftLine[]) => {
+    const short = ls.flatMap((l, i) => {
+      const it = itemFor(l);
+      const need = Number(l.qty) || 0;
+      if (!it || need <= 0) return [];
+      const have = Math.max(0, poolFor(l) - takenElsewhere(l, i, ls));
+      if (need <= have) return [];
+      const itemNeed = ls.reduce((s, x) => s + (x.item_id === l.item_id ? Number(x.qty) || 0 : 0), 0);
+      // Another lot can only help when this row is on a lot and the item as a whole has enough.
+      return [{ i, l, it, need, have, split: l.batch_id !== '' && itemNeed <= Number(it.stock) }];
+    });
+    if (short.length === 0) return;
+
+    const canSplit = short.some((s) => s.split);
+    const html = '<div style="text-align:left;font-size:14px;line-height:1.6">' + short.map((s) => {
+      const onLot = s.l.batch_id !== '';
+      return `<div style="margin-bottom:8px"><b>${esc(`${s.it.code} · ${s.it.name}`)}</b><br>`
+        + `Need <b>${fmt0(s.need)}</b>, only <b>${fmt0(s.have)}</b> left${onLot ? ` in the ${lotLabel(s.l, s.it)}` : ' in stock'}.`
+        + (s.split
+          ? ` Add the other <b>${fmt0(s.need - s.have)}</b> from another cost lot.`
+          : onLot ? ` Only <b>${fmt0(Number(s.it.stock))}</b> in stock altogether.` : '')
+        + '</div>';
+    }).join('') + '</div>';
+
+    const ok = await warnDialog({
+      title: canSplit ? 'Not enough in this cost lot' : 'Not enough stock',
+      html,
+      confirmText: canSplit ? 'Add from another lot' : 'OK',
+      cancelText: canSplit ? 'Edit myself' : undefined,
+    });
+    if (!ok || !canSplit) return;
+
+    setLines((cur) => {
+      const next = [...cur];
+      // Bottom-up, so inserting a row never shifts one still to be split.
+      short.filter((s) => s.split).reverse().forEach(({ i, it, need, have }) => {
+        next[i] = { ...next[i], qty: String(have) };
+        next.splice(i + 1, 0, { item_id: next[i].item_id, batch_id: '', qty: String(need - have), price: Number(it.retail_price).toFixed(2) });
+      });
+      return next;
+    });
+  };
+
   const validLines = lines.filter((l) => l.item_id !== '' && Number(l.qty) > 0);
   const runCost = validLines.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.price) || 0), 0);
-  const anyShort = lines.some((l, i) => {
-    const it = itemFor(l);
-    if (!it || !(Number(l.qty) > 0)) return false;
-    const batch = batchFor(l);
-    const pool = l.batch_id === 0 ? looseFor(it) : batch ? Number(batch.qty_remaining) : Number(it.stock);
-    return Number(l.qty) > pool - takenElsewhere(l, i);
-  });
+  const anyShort = lines.some((l, i) =>
+    itemFor(l) !== undefined && Number(l.qty) > 0 && Number(l.qty) > poolFor(l) - takenElsewhere(l, i));
   const canSave = validLines.length > 0 && !anyShort && !busy;
 
   const save = async () => {
@@ -446,7 +571,13 @@ function AssembleModal({ product, onClose, onSaved }: { product: Product; onClos
       <div className="grid grid-cols-2 gap-4 mb-4">
         <Field label="Units to assemble" req hint="How many finished units this run makes.">
           <Input className="mono text-right" inputMode="numeric" value={units}
-            onChange={(e) => setUnits(e.target.value.replace(/\D/g, ''))} />
+            onChange={(e) => {
+              const v = e.target.value.replace(/\D/g, '');
+              setUnits(v);
+              // Component quantities follow the run size; any row stays editable.
+              if (v) setLines((ls) => fitToUnits(ls, Math.max(1, Number(v))));
+            }}
+            onBlur={() => void warnShort(lines)} />
         </Field>
       </div>
 
@@ -468,9 +599,7 @@ function AssembleModal({ product, onClose, onSaved }: { product: Product; onClos
           <tbody>
             {lines.map((l, i) => {
               const it = itemFor(l);
-              const batch = batchFor(l);
-              const pool = l.batch_id === 0 ? (it ? looseFor(it) : 0) : batch ? Number(batch.qty_remaining) : Number(it?.stock ?? 0);
-              const have = pool - takenElsewhere(l, i);
+              const have = poolFor(l) - takenElsewhere(l, i);
               const over = it ? (Number(l.qty) || 0) > have : false;
               return (
                 <tr key={i} className="border-t border-border">
@@ -515,6 +644,7 @@ function AssembleModal({ product, onClose, onSaved }: { product: Product; onClos
                   <td className="p-1.5 align-top">
                     <Input className="mono text-right" value={l.qty}
                       onChange={(e) => setLine(i, { qty: e.target.value.replace(/\D/g, '') })}
+                      onBlur={() => void warnShort(lines)}
                       style={{ height: 36, borderColor: over ? 'var(--red)' : undefined }} />
                   </td>
                   <td className="p-1.5 align-top">
@@ -532,7 +662,7 @@ function AssembleModal({ product, onClose, onSaved }: { product: Product; onClos
         <Button variant="subtle" size="sm" icon={<Plus size={14} />} onClick={addLine} style={{ margin: 8 }}>Add item</Button>
       </div>
       <div className="text-[11.5px]" style={{ color: 'var(--text-faint)' }}>
-        Seeded from the recipe — change the items, cost lots or quantities to match what this run actually used.
+        Quantities follow the recipe as the units change — edit any row, or split an item over more than one cost lot, to match what this run actually used.
       </div>
     </Modal>
   );

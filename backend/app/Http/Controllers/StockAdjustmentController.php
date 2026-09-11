@@ -29,7 +29,10 @@ class StockAdjustmentController extends Controller
                 'grns.date as grn_date',
                 'item_batches.unit_cost',
                 'item_batches.qty_remaining as qty',
+                'item_batches.created_at',
             ]);
+        // A product's lots that did not come from a GRN are its assembly runs.
+        $isProduct = $item->product()->exists();
 
         $held = (int) $batches->sum('qty');
         $lots = [];
@@ -38,13 +41,18 @@ class StockAdjustmentController extends Controller
             $lots[] = [
                 'batch_id' => null, 'grn_id' => 0, 'grn_no' => null, 'grn_date' => null,
                 'unit_cost' => null, 'price' => (float) $item->retail_price, 'qty' => max($opening, 0),
+                'assembled' => false,
             ];
         }
         foreach ($batches as $b) {
+            $assembled = $isProduct && ! $b->grn_id;
             $lots[] = [
                 'batch_id' => (int) $b->batch_id, 'grn_id' => (int) $b->grn_id,
-                'grn_no' => $b->grn_no, 'grn_date' => $b->grn_date,
+                'grn_no' => $b->grn_no,
+                // An assembly run is dated by when it was built.
+                'grn_date' => $b->grn_date ?? ($assembled ? optional($b->created_at)->toDateString() : null),
                 'unit_cost' => (float) $b->unit_cost, 'price' => (float) $b->unit_cost, 'qty' => (int) $b->qty,
+                'assembled' => $assembled,
             ];
         }
 

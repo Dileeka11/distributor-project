@@ -40,6 +40,24 @@ export async function alertError(title: string, text?: string): Promise<void> {
   });
 }
 
+// SweetAlert warning with an optional follow-up action (e.g. a stock shortfall
+// the user can fix in one click). Resolves true only when the action is chosen.
+export async function warnDialog(opts: { title: string; html: string; confirmText?: string; cancelText?: string; icon?: 'warning' | 'info' }): Promise<boolean> {
+  const Swal = await getSwal();
+  const r = await Swal.fire({
+    icon: opts.icon ?? 'warning',
+    title: opts.title,
+    html: opts.html,
+    showCancelButton: !!opts.cancelText,
+    confirmButtonText: opts.confirmText ?? 'OK',
+    cancelButtonText: opts.cancelText,
+    confirmButtonColor: cssVar('--accent', '#C8102E'),
+    cancelButtonColor: '#9aa1ab',
+    reverseButtons: true,
+  });
+  return r.isConfirmed;
+}
+
 // SweetAlert confirmation used for destructive actions (delete).
 export async function confirmDelete(opts: { title?: string; html?: string; confirmText?: string } = {}): Promise<boolean> {
   const Swal = await getSwal();

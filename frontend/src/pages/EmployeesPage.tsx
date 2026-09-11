@@ -251,7 +251,7 @@ function RoleManager({ roles, selected, onSelect, onChanged, onClose }: {
   };
 
   return (
-    <Modal title="Manage Job Roles" onClose={onClose} footer={<Button variant="ghost" onClick={onClose}>Done</Button>}>
+    <Modal title="Manage Job Roles" onClose={onClose} footer={<Button variant="ghost" onClick={onClose}>Close</Button>}>
       <div className="flex gap-2 mb-4">
         <Input
           className="flex-1"

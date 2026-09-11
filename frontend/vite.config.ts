@@ -25,9 +25,12 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     open: true,
+    // 8001, not 8000: other local Laravel projects (e.g. agency) serve on 8000,
+    // and on Windows both servers bind the same port — requests then land on
+    // the wrong app ("The route api/auth/login could not be found").
     proxy: {
-      '/api': { target: 'http://localhost:8000', changeOrigin: true },
-      '/sanctum': { target: 'http://localhost:8000', changeOrigin: true },
+      '/api': { target: 'http://127.0.0.1:8001', changeOrigin: true },
+      '/sanctum': { target: 'http://127.0.0.1:8001', changeOrigin: true },
     },
   },
 });

@@ -25,6 +25,8 @@ class ProductController extends Controller
         $rows = Product::query()
             ->with([
                 'item.category:id,name',
+                // Cost lots still holding units — one per assembly run.
+                'item.batches' => fn ($q) => $q->where('qty_remaining', '>', 0)->orderBy('id'),
                 'components.item:id,code,name,stock,retail_price',
             ])
             ->orderByDesc('id')
@@ -101,6 +103,9 @@ class ProductController extends Controller
                 $this->logRun($product, $c, $units);
             }
             $this->logBuild($product, (int) $item->id, $units);
+            // The units just built are a cost lot of their own, so an invoice can
+            // sell them against what this run actually cost.
+            $this->addLot((int) $item->id, $actual, $units);
 
             // Project the components + the new product item into the stock ledger.
             $ids = array_map(fn ($c) => (int) $c['item']->id, $components);
@@ -163,12 +168,18 @@ class ProductController extends Controller
                 $components = $this->lockComponents($lines, $units);
             }
 
+            $runCost = 0.0;
             foreach ($components as $c) {
                 $this->consume($c);
                 $this->logRun($product, $c, $units);
+                $runCost += $c['total'];
             }
             Item::query()->whereKey($product->item_id)->increment('stock', $units);
             $this->logBuild($product, (int) $product->item_id, $units);
+            // Line totals cover the whole run when quantities were sent, but only
+            // one unit's worth when the stored per-unit recipe was used.
+            $perUnit = round(($sent && $hasQty) ? $runCost / $units : $runCost, 2);
+            $this->addLot((int) $product->item_id, $perUnit, $units);
 
             $ids = array_map(fn ($c) => (int) $c['item']->id, $components);
             $ids[] = (int) $product->item_id;
@@ -199,11 +210,15 @@ class ProductController extends Controller
             // due to restrictOnDelete. In that case, we delete the product definition and set 
             // the item's stock to 0, keeping the item row for audit reference.
             // Otherwise, we delete the item entirely.
-            $isReferenced = DB::table('invoice_lines')->where('item_id', $product->item_id)->exists();
+            // A sales order line holds the item the same way an invoice line does.
+            $isReferenced = DB::table('invoice_lines')->where('item_id', $product->item_id)->exists()
+                || DB::table('sales_order_lines')->where('item_id', $product->item_id)->exists();
             if ($isReferenced) {
                 $product->delete();
                 if ($product->item) {
                     $product->item->update(['stock' => 0]);
+                    // Its cost lots empty along with it.
+                    ItemBatch::query()->where('item_id', $product->item_id)->update(['qty_remaining' => 0]);
                 }
             } else {
                 if ($product->item) {
@@ -270,6 +285,24 @@ class ProductController extends Controller
         }
 
         return $out;
+    }
+
+    /**
+     * Cost lot for the units a run produced, at what one unit cost to make.
+     * Not tied to a GRN; the run's build row in product_runs stays un-lotted so
+     * StockService::reconcile does not count these units in twice.
+     */
+    private function addLot(int $itemId, float $unitCost, int $units): void
+    {
+        ItemBatch::query()->create([
+            'item_id' => $itemId,
+            'grn_id' => null,
+            'unit_price' => $unitCost,
+            'discount' => 0,
+            'unit_cost' => $unitCost,
+            'qty_in' => $units,
+            'qty_remaining' => $units,
+        ]);
     }
 
     /** Ledger row for a component taken off the shelf by a run (stock out). */

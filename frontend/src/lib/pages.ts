@@ -11,6 +11,7 @@ export const PAGES: PageDef[] = [
   { key: 'suppliers', label: 'Suppliers', to: '/suppliers', group: 'Masters' },
   { key: 'customers', label: 'Customers', to: '/customers', group: 'Masters' },
   { key: 'employees', label: 'Employees', to: '/employees', group: 'Masters' },
+  { key: 'sales_orders', label: 'Sales Orders', to: '/sales-orders', group: 'Transactions' },
   { key: 'invoices', label: 'Invoices', to: '/invoices', group: 'Transactions' },
   { key: 'grns', label: 'Purchases (GRN)', to: '/grns', group: 'Transactions' },
   { key: 'sales_returns', label: 'Sales Returns', to: '/sales-returns', group: 'Transactions' },

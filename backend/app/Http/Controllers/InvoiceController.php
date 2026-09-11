@@ -7,6 +7,7 @@ use App\Models\Customer;
 use App\Models\Invoice;
 use App\Models\Item;
 use App\Models\ItemBatch;
+use App\Models\SalesOrder;
 use App\Services\NumberService;
 use App\Services\ReturnCreditService;
 use App\Services\SettlementService;
@@ -77,6 +78,13 @@ class InvoiceController extends Controller
         $taxRate = $this->allowedTaxRate($request, $data);
 
         $invoice = DB::transaction(function () use ($data, $taxRate, $request) {
+            // Raised from a sales order: it must still be waiting to go out.
+            $order = null;
+            if (! empty($data['sales_order_id'])) {
+                $order = SalesOrder::query()->lockForUpdate()->findOrFail($data['sales_order_id']);
+                abort_unless($order->status === 'pending', 422, "Sales order {$order->no} is already {$order->status}.");
+            }
+
             $invoice = new Invoice([
                 'no' => NumberService::next(Invoice::class, NumberService::invoicePrefix()),
                 'date' => now()->toDateString(),
@@ -85,6 +93,11 @@ class InvoiceController extends Controller
 
             $this->applyInvoiceData($invoice, $data, $taxRate);
             app(StockService::class)->projectMany(collect($data['lines'])->pluck('item_id')->all());
+
+            // The order is now fulfilled by this invoice.
+            if ($order) {
+                $order->update(['status' => 'invoiced', 'invoice_id' => $invoice->id]);
+            }
 
             return $invoice;
         });
@@ -147,6 +160,9 @@ class InvoiceController extends Controller
                 'advance' => 0,
                 'status' => 'unpaid',
             ])->save();
+            // A sales order this invoice fulfilled is waiting to go out again.
+            SalesOrder::query()->where('invoice_id', $invoice->id)->where('status', 'invoiced')
+                ->update(['status' => 'pending', 'invoice_id' => null]);
             app(StockService::class)->projectMany($ids);
         });
 

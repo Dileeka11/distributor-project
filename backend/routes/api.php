@@ -16,6 +16,7 @@ use App\Http\Controllers\LeaveCategoryController;
 use App\Http\Controllers\LeaveController;
 use App\Http\Controllers\PayrollController;
 use App\Http\Controllers\ProductController;
+use App\Http\Controllers\SalesOrderController;
 use App\Http\Controllers\SalesReturnController;
 use App\Http\Controllers\SettingController;
 use App\Http\Controllers\StockController;
@@ -66,6 +67,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/products/{product}', [ProductController::class, 'destroy']);
     Route::apiResource('suppliers', SupplierController::class)->only(['index', 'store', 'update', 'destroy']);
     Route::apiResource('customers', CustomerController::class)->only(['index', 'store', 'update', 'destroy']);
+
+    Route::get('/sales-orders', [SalesOrderController::class, 'index']);
+    Route::post('/sales-orders', [SalesOrderController::class, 'store']);
+    Route::get('/sales-orders/{salesOrder}', [SalesOrderController::class, 'show']);
+    Route::put('/sales-orders/{salesOrder}', [SalesOrderController::class, 'update']);
+    Route::post('/sales-orders/{salesOrder}/cancel', [SalesOrderController::class, 'cancel']);
+    Route::delete('/sales-orders/{salesOrder}', [SalesOrderController::class, 'destroy']);
 
     Route::get('/invoices', [InvoiceController::class, 'index']);
     Route::post('/invoices', [InvoiceController::class, 'store']);

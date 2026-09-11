@@ -13,6 +13,8 @@ export interface Item {
   retail_price: string | number;
   stock: number;
   opening_discount?: string | number; // % off when selling old/opening stock
+  // Cost lots still holding units (loaded with products: one per assembly run).
+  batches?: ItemBatch[];
   // Present when this item is a composite product built from other items.
   product?: { id: ID; item_id: ID; actual_price: string | number; selling_price: string | number } | null;
 }
@@ -85,6 +87,29 @@ export interface InvoiceLine {
   total: string | number;
   // `product` is set only when the item is a composite product (a PRD- code).
   item?: { id: ID; code: string; name: string; product?: { id: ID; item_id: ID } | null };
+}
+
+export interface SalesOrderLine {
+  id?: ID;
+  item_id: ID;
+  name: string; // snapshot
+  qty: number;
+}
+
+/** What a customer wants on a given day — becomes an invoice when it goes out. */
+export interface SalesOrder {
+  id: ID;
+  no: string;
+  date: string;      // taken on (Y-m-d)
+  due_date: string;  // to deliver / invoice on (Y-m-d)
+  customer_id: ID;
+  customer?: { id: ID; code: string; name: string; phone: string | null; address: string | null };
+  status: 'pending' | 'invoiced' | 'cancelled';
+  note: string | null;
+  invoice_id: ID | null;
+  invoice?: { id: ID; no: string } | null;
+  cancelled_at: string | null;
+  lines?: SalesOrderLine[];
 }
 
 export interface ItemBatch {

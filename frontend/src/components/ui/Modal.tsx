@@ -1,20 +1,34 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/cn';
+
+// Open modals, innermost last. Escape closes only the top one, so a form opened
+// from inside another (e.g. adding a supplier from a GRN) keeps its parent open.
+const openModals: symbol[] = [];
 
 export function Modal({
   title, onClose, footer, children, lg, xl,
 }: { title: ReactNode; onClose: () => void; footer?: ReactNode; children: ReactNode; lg?: boolean; xl?: boolean }) {
+  // onClose is often a fresh arrow each render; read it through a ref so the
+  // modal registers once, on mount, and keeps its place in the stack.
+  const closeRef = useRef(onClose);
+  useEffect(() => { closeRef.current = onClose; });
+
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const me = Symbol('modal');
+    openModals.push(me);
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && openModals[openModals.length - 1] === me) closeRef.current();
+    };
     document.addEventListener('keydown', handler);
     const { overflow } = document.body.style;
     document.body.style.overflow = 'hidden';
     return () => {
+      openModals.splice(openModals.indexOf(me), 1);
       document.removeEventListener('keydown', handler);
       document.body.style.overflow = overflow;
     };
-  }, [onClose]);
+  }, []);
 
   return (
     <div

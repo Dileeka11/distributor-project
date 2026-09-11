@@ -14,6 +14,7 @@ import { canUse } from '@/lib/pages';
 import { Modal } from '@/components/ui/Modal';
 import { Field, MoneyInput, Input, Select } from '@/components/ui/Field';
 import { SearchSelect } from '@/components/ui/SearchSelect';
+import { SupplierModal } from '@/components/SupplierModal';
 import { TotalRow } from './InvoicesPage';
 import type { AppSettings, Grn, Item, ReturnStockRow, Supplier } from '@/types';
 
@@ -343,6 +344,7 @@ function CreateGrn({ editGrn, onClose, onSaved }: { editGrn?: Grn | null; onClos
     setCheques((cs) => cs.map((c, idx) => (idx === i ? { ...c, ...patch } : c)));
 
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [addingSupplier, setAddingSupplier] = useState(false);
   const [items, setItems] = useState<Item[]>([]);
   const [busy, setBusy] = useState(false);
   // The returnable pool, and the rows of it being sent back on this GRN.
@@ -452,6 +454,7 @@ function CreateGrn({ editGrn, onClose, onSaved }: { editGrn?: Grn | null; onClos
   };
 
   return (
+    <>
     <Modal
       xl
       title={isEdit ? `Edit GRN ${editGrn!.no}` : 'New Goods Received Note'}
@@ -501,14 +504,28 @@ function CreateGrn({ editGrn, onClose, onSaved }: { editGrn?: Grn | null; onClos
 
       <div className="mb-5">
         <Field label="Supplier" req hint="Who you are buying stock from">
-          <SearchSelect
-            items={suppliers}
-            value={supplierId}
-            onChange={setSupplierId}
-            allLabel="Select supplier…"
-            placeholder="Search name, code or mobile…"
-            subtitle={(s) => `${s.code}${s.phone ? ` · ${s.phone}` : ''}`}
-          />
+          <div className="flex gap-2">
+            <div className="flex-1 min-w-0">
+              <SearchSelect
+                items={suppliers}
+                value={supplierId}
+                onChange={setSupplierId}
+                allLabel="Select supplier…"
+                placeholder="Search name, code or mobile…"
+                subtitle={(s) => `${s.code}${s.phone ? ` · ${s.phone}` : ''}`}
+              />
+            </div>
+            {canUse(user, 'suppliers') && (
+              <Button
+                variant="subtle"
+                icon={<Plus size={17} />}
+                title="Add a new supplier"
+                aria-label="Add a new supplier"
+                onClick={() => setAddingSupplier(true)}
+                style={{ height: 40, width: 40, flexShrink: 0 }}
+              />
+            )}
+          </div>
         </Field>
       </div>
 
@@ -711,6 +728,20 @@ function CreateGrn({ editGrn, onClose, onSaved }: { editGrn?: Grn | null; onClos
         </div>
       </div>
     </Modal>
+
+    {addingSupplier && (
+      <SupplierModal
+        suppliers={suppliers}
+        onClose={() => setAddingSupplier(false)}
+        onSaved={(s) => {
+          // Saved to the supplier master; add it to this list and select it.
+          setSuppliers((ls) => [...ls, s].sort((a, b) => a.name.localeCompare(b.name)));
+          setSupplierId(Number(s.id));
+          setAddingSupplier(false);
+        }}
+      />
+    )}
+    </>
   );
 }
 

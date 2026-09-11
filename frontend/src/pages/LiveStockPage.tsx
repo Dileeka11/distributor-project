@@ -22,6 +22,7 @@ interface Lot {
   unit_cost: number | null;
   price: number;
   qty: number;
+  assembled?: boolean; // a product's assembly-run lot (no GRN, but not opening stock)
 }
 
 interface LotsResponse {
@@ -295,7 +296,7 @@ export default function LiveStockPage() {
                   </thead>
                   <tbody>
                     {lotData.lots.map((l, index) => {
-                      const isOpening = l.grn_id === 0;
+                      const isOpening = l.grn_id === 0 && !l.assembled;
                       return (
                         <tr key={index}>
                           <td>
@@ -304,7 +305,7 @@ export default function LiveStockPage() {
                             ) : (
                               <div className="flex items-center gap-2">
                                 <Layers size={14} style={{ color: 'var(--blue)' }} />
-                                <span className="mono font-semibold">{l.grn_no ?? `GRN #${l.grn_id}`}</span>
+                                <span className="mono font-semibold">{l.assembled ? 'Assembly run' : (l.grn_no ?? `GRN #${l.grn_id}`)}</span>
                               </div>
                             )}
                           </td>

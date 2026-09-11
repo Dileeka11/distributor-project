@@ -17,7 +17,7 @@ import { DiamondInvoiceModal } from '@/components/DiamondInvoiceModal';
 import { Switch } from '@/components/ui/Common';
 import { useAuth } from '@/store/auth';
 import { canUse } from '@/lib/pages';
-import type { Customer, Invoice, Item, ItemBatch } from '@/types';
+import type { Customer, Invoice, Item, ItemBatch, SalesOrder } from '@/types';
 
 type Tab = 'all' | 'cash' | 'credit' | 'cancelled';
 
@@ -159,7 +159,12 @@ export default function InvoicesPage() {
   );
 }
 
-function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoice | null; onClose: () => void; onSaved: (inv?: Invoice) => void }) {
+/**
+ * Create / edit an invoice. With `fromOrder` it is raised from a sales order:
+ * the customer and items arrive pre-filled, and the cost lot for each line is
+ * chosen here, exactly as for any other sale.
+ */
+export function CreateInvoice({ editInvoice, fromOrder, onClose, onSaved }: { editInvoice?: Invoice | null; fromOrder?: SalesOrder | null; onClose: () => void; onSaved: (inv?: Invoice) => void }) {
   const { settings } = useSettings();
   const { user } = useAuth();
   // Tax is off unless switched on, and only users granted "Tax / VAT control"
@@ -169,7 +174,7 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
   const [taxOn, setTaxOn] = useState(false);
   const isEdit = !!editInvoice;
   const [type, setType] = useState<'cash' | 'credit'>('cash');
-  const [customerId, setCustomerId] = useState<number | ''>('');
+  const [customerId, setCustomerId] = useState<number | ''>(fromOrder && !editInvoice ? Number(fromOrder.customer_id) : '');
   const [discCash, setDiscCash] = useState(false);
   const [discCheque, setDiscCheque] = useState(false);
   const [discCredit, setDiscCredit] = useState(false);
@@ -181,7 +186,11 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
   const [creditAvail, setCreditAvail] = useState(0);
   const [editCredit, setEditCredit] = useState(0);
   const [useCredit, setUseCredit] = useState(false);
-  const [lines, setLines] = useState<DraftLine[]>([blankLine()]);
+  // An order's lines come in with no price (filled in once items load) and no
+  // cost lot — that is picked per line below.
+  const [lines, setLines] = useState<DraftLine[]>(() => (fromOrder && !editInvoice && fromOrder.lines?.length
+    ? fromOrder.lines.map((l) => ({ item_id: Number(l.item_id), batch_id: '' as number | '', qty: String(l.qty), price: '0' }))
+    : [blankLine()]));
   const [paid, setPaid] = useState('');
   const [cheques, setCheques] = useState<ChequeRow[]>([]);
   const taxRate = mayTax && taxOn ? settingsTax : 0;
@@ -222,7 +231,25 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
 
   useEffect(() => {
     void http.get('/api/customers').then((r) => setCustomers(r.data.data));
-    void http.get('/api/items').then((r) => setItems(r.data.data));
+    void http.get('/api/items').then((r) => {
+      const list: Item[] = r.data.data;
+      setItems(list);
+      // An order's lines sell at each item's price, as if picked here.
+      if (fromOrder && !isEdit) {
+        setLines((ls) => ls.map((l) => {
+          const it = list.find((x) => Number(x.id) === l.item_id);
+          return it && l.price === '0' ? { ...l, price: Number(it.wholesale_price).toFixed(2) } : l;
+        }));
+      }
+    });
+    // …and need their cost lots listed, again as if each item had been picked.
+    if (fromOrder && !isEdit) {
+      (fromOrder.lines ?? []).forEach((l) => {
+        const id = Number(l.item_id);
+        void http.get(`/api/items/${id}/batches`).then((r) => setBatchesByItem((m) => ({ ...m, [id]: r.data.data })));
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadBatches = (itemId: number) => {
@@ -331,6 +358,8 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
     try {
       const payload = {
         type, customer_id: customerId, tax_rate: taxRate,
+        // Raised from a sales order: saving marks that order invoiced.
+        sales_order_id: !isEdit && fromOrder ? fromOrder.id : undefined,
         cash_discount: discCash ? Number(cashPctVal) || 0 : 0,
         cheque_discount: discCheque ? Number(chequePctVal) || 0 : 0,
         credit_discount: discCredit ? Number(creditPctVal) || 0 : 0,
@@ -355,7 +384,7 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
   return (
     <Modal
       lg
-      title={isEdit ? `Edit Invoice ${editInvoice!.no}` : 'Create Invoice'}
+      title={isEdit ? `Edit Invoice ${editInvoice!.no}` : fromOrder ? `Invoice for order ${fromOrder.no}` : 'Create Invoice'}
       onClose={() => { if (!busy) onClose(); }}
       footer={
         <>
@@ -437,6 +466,11 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
               // minus this line's qty when that option is the one selected.
               const optLeft = (poolId: number, poolTotal: number) =>
                 fmt0(Math.max(0, poolTotal - batchUsedElsewhere(poolId, i) - (Number(l.batch_id) === poolId ? thisQty : 0)));
+              // A product's margin depends on which assembly run's lot the units
+              // come from; un-lotted (earlier) units cost the recorded actual price.
+              const sellAt = Number(l.price) || Number(it?.wholesale_price ?? 0);
+              const cost = it?.product ? (batch ? Number(batch.unit_cost) : Number(it.product.actual_price)) : 0;
+              const margin = sellAt - cost;
               return (
                 <tr key={i} className="border-t border-border">
                   <td className="p-1.5">
@@ -459,16 +493,17 @@ function CreateInvoice({ editInvoice, onClose, onSaved }: { editInvoice?: Invoic
                         setLine(i, patch);
                       }} style={{ height: 32, fontSize: 12, marginTop: 6 }}>
                         <option value="">Select stock / batch…</option>
-                        {it && looseFor(it) > 0 && (
-                          <option value="0">old stock · Rs {fmt(oldStockPrice(it))}{Number(it.opening_discount ?? 0) > 0 ? ` (−${fmt(Number(it.opening_discount))}%)` : ''} · {optLeft(0, looseFor(it))} left</option>
+                        {it && looseFor(it) > 0 && (it.product
+                          ? <option value="0">earlier runs · cost Rs {fmt(Number(it.product.actual_price))} · margin Rs {fmt(sellAt - Number(it.product.actual_price))} · {optLeft(0, looseFor(it))} left</option>
+                          : <option value="0">old stock · Rs {fmt(oldStockPrice(it))}{Number(it.opening_discount ?? 0) > 0 ? ` (−${fmt(Number(it.opening_discount))}%)` : ''} · {optLeft(0, looseFor(it))} left</option>
                         )}
-                        {batchesFor(l).map((b) => <option key={b.id} value={b.id}>cost Rs {fmt(b.unit_cost as number)} · {optLeft(Number(b.id), Number(b.qty_remaining))} left</option>)}
+                        {batchesFor(l).map((b) => <option key={b.id} value={b.id}>cost Rs {fmt(b.unit_cost as number)}{it?.product ? ` · margin Rs ${fmt(sellAt - Number(b.unit_cost))}` : ''} · {optLeft(Number(b.id), Number(b.qty_remaining))} left</option>)}
                       </Select>
                     )}
                     {it && (
                       <div className="text-[12px] mt-1" style={{ color: short ? 'var(--red)' : 'var(--text-muted)' }}>
-                        Stock: {fmt0(remaining)} left{l.batch_id === 0 ? ' (old stock)' : batch ? ' (this batch)' : ''} · {it.product
-                          ? <>Actual Rs {fmt(Number(it.product.actual_price))}</>
+                        Stock: {fmt0(remaining)} left{l.batch_id === 0 ? (it.product ? ' (earlier runs)' : ' (old stock)') : batch ? ' (this batch)' : ''} · {it.product
+                          ? <>Cost Rs {fmt(cost)} · <span style={{ color: margin >= 0 ? 'var(--green)' : 'var(--red)' }}>margin Rs {fmt(margin)}{thisQty > 1 ? ` × ${fmt0(thisQty)} = Rs ${fmt(margin * thisQty)}` : ''}</span></>
                           : <>WP Rs {fmt(it.wholesale_price as number)}</>}
                         {short ? ` — only ${fmt0(cap)} available` : ''}
                       </div>

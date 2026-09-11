@@ -1,5 +1,5 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
-import { LayoutDashboard, Package, Boxes, SlidersHorizontal, ArrowLeftRight, Truck, Users, ReceiptText, PackageOpen, Scale, FileBarChart2, UserCog, CalendarCheck, Wallet, ShieldCheck, ChevronDown, Settings as SettingsIcon, LogOut, Warehouse, Undo2, Menu } from 'lucide-react';
+import { LayoutDashboard, Package, Boxes, SlidersHorizontal, ArrowLeftRight, Truck, Users, ReceiptText, PackageOpen, Scale, FileBarChart2, UserCog, CalendarCheck, Wallet, ShieldCheck, ChevronDown, Settings as SettingsIcon, LogOut, Warehouse, Undo2, Menu, ClipboardList } from 'lucide-react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '@/store/auth';
 import { useSettings } from '@/store/settings';
@@ -16,6 +16,7 @@ const NAV: NavEntry[] = [
   { to: '/suppliers', label: 'Suppliers', icon: Truck, group: 'Masters', perm: 'suppliers' },
   { to: '/customers', label: 'Customers', icon: Users, group: 'Masters', perm: 'customers' },
   { to: '/employees', label: 'Employees', icon: UserCog, group: 'Masters', perm: 'employees' },
+  { to: '/sales-orders', label: 'Sales Orders', icon: ClipboardList, group: 'Transactions', perm: 'sales_orders' },
   { to: '/invoices', label: 'Invoices', icon: ReceiptText, group: 'Transactions', perm: 'invoices' },
   { to: '/grns', label: 'Purchases (GRN)', icon: PackageOpen, group: 'Transactions', perm: 'grns' },
   { to: '/sales-returns', label: 'Sales Returns', icon: Undo2, group: 'Transactions', perm: 'sales_returns' },

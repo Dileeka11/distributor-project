@@ -22,6 +22,8 @@ class StoreInvoiceRequest extends FormRequest
             'return_credit' => ['nullable', 'numeric', 'min:0'],
             'tax_rate' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'paid' => ['nullable', 'numeric', 'min:0'],
+            // Set when the invoice is raised from a sales order (create only).
+            'sales_order_id' => ['nullable', 'exists:sales_orders,id'],
             'lines' => ['required', 'array', 'min:1'],
             'lines.*.item_id' => ['required', 'exists:items,id'],
             'lines.*.batch_id' => ['nullable', 'exists:item_batches,id'],

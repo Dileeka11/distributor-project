@@ -19,8 +19,12 @@ import type { Category, Item } from '@/types';
 interface Lot {
   batch_id: number | null; grn_id: number; grn_no: string | null; grn_date: string | null;
   unit_cost: number | null; price: number; qty: number;
+  assembled?: boolean; // a product's assembly-run lot (no GRN, but not opening stock)
 }
 interface LotsResponse { item: { id: number; code: string; name: string; stock: number }; lots: Lot[]; }
+
+const isOpeningLot = (l: Lot) => l.grn_id === 0 && !l.assembled;
+const lotLabel = (l: Lot) => (l.assembled ? 'Assembly run' : (l.grn_no ?? `GRN #${l.grn_id}`));
 
 export default function StockAdjustPage() {
   const [cats, setCats] = useState<Category[]>([]);
@@ -76,9 +80,9 @@ export default function StockAdjustPage() {
               {pager.slice.map((l) => (
                 <tr key={l.batch_id ?? 'opening'}>
                   <td>
-                    {l.grn_id === 0
+                    {isOpeningLot(l)
                       ? <span className="flex items-center gap-2"><Badge kind="gray">Opening</Badge></span>
-                      : <span className="flex items-center gap-2"><Layers size={15} style={{ color: 'var(--blue)' }} /><span className="mono font-semibold">{l.grn_no ?? `GRN #${l.grn_id}`}</span></span>}
+                      : <span className="flex items-center gap-2"><Layers size={15} style={{ color: 'var(--blue)' }} /><span className="mono font-semibold">{lotLabel(l)}</span></span>}
                   </td>
                   <td className="text-[12px] whitespace-nowrap" style={{ color: 'var(--text-muted)' }}>{l.grn_date ? prettyDate(l.grn_date) : '—'}</td>
                   <td className="num money">{l.unit_cost != null ? `cost ${fmt(l.unit_cost)}` : `price ${fmt(l.price)}`}</td>
@@ -123,7 +127,7 @@ function AdjustModal({ item, lot, onClose, onSaved }: {
   const n = Number(qty) || 0;
   const tooMany = type === 'reduce' && n > lot.qty;
   const valid = n > 0 && !tooMany && !busy;
-  const lotName = lot.grn_id === 0 ? 'Opening stock' : (lot.grn_no ?? `GRN #${lot.grn_id}`);
+  const lotName = isOpeningLot(lot) ? 'Opening stock' : lotLabel(lot);
   const after = type === 'add' ? lot.qty + n : lot.qty - n;
 
   const save = async () => {
@@ -148,7 +152,7 @@ function AdjustModal({ item, lot, onClose, onSaved }: {
       <div className="rounded-[10px] p-3.5 mb-4 flex items-center justify-between" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
         <div>
           <div className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--text-faint)' }}>Lot</div>
-          <div className="font-semibold flex items-center gap-2">{lot.grn_id === 0 ? <Badge kind="gray">Opening</Badge> : <span className="mono">{lotName}</span>}</div>
+          <div className="font-semibold flex items-center gap-2">{isOpeningLot(lot) ? <Badge kind="gray">Opening</Badge> : <span className="mono">{lotName}</span>}</div>
         </div>
         <div className="text-right">
           <div className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--text-faint)' }}>Current qty</div>
